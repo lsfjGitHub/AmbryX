@@ -36,6 +36,7 @@ public class AmbryMain {
     final AmbryServer ambryServer;
     int exitCode = 0;
     try {
+      //载入相关配置
       final InvocationOptions options = new InvocationOptions(args);
       final Properties properties = Utils.loadProps(options.serverPropsFilePath);
       final VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
@@ -43,15 +44,18 @@ public class AmbryMain {
           new ClusterMapManager(options.hardwareLayoutFilePath, options.partitionLayoutFilePath,
               new ClusterMapConfig(verifiableProperties));
       logger.info("Bootstrapping AmbryServer");
+      //利用配置新建AmbryServer
       ambryServer = new AmbryServer(verifiableProperties, clusterMap, SystemTime.getInstance());
-      // attach shutdown handler to catch control-c
+      // 增加一个钩子来监听程序关闭事件，例如(kill -9，ctrl+c)
       Runtime.getRuntime().addShutdownHook(new Thread() {
         public void run() {
           logger.info("Received shutdown signal. Shutting down AmbryServer");
           ambryServer.shutdown();
         }
       });
+      //启动AmbryServer
       ambryServer.startup();
+      //主线程进入阻塞状态
       ambryServer.awaitShutdown();
     } catch (Exception e) {
       logger.error("Exception during bootstrap of AmbryServer", e);
