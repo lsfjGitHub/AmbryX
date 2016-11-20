@@ -47,8 +47,7 @@ public class ServerHardDeleteTest {
   private MockClusterMap mockClusterMap;
 
   @Before
-  public void initialize()
-      throws Exception {
+  public void initialize() throws Exception {
     notificationSystem = new MockNotificationSystem(1);
     mockClusterMap = new MockClusterMap(false, 1, 1, 1);
     time = new MockTime(SystemTime.getInstance().milliseconds());
@@ -64,8 +63,7 @@ public class ServerHardDeleteTest {
   }
 
   @After
-  public void cleanup()
-      throws IOException {
+  public void cleanup() throws IOException {
     server.shutdown();
     mockClusterMap.cleanup();
   }
@@ -117,7 +115,7 @@ public class ServerHardDeleteTest {
         DataInputStream stream = new DataInputStream(crcStream);
         try {
           short version = stream.readShort();
-          Assert.assertEquals(version, PersistentIndex.Cleanup_Token_Version_V1);
+          Assert.assertEquals(version, HardDeleter.Cleanup_Token_Version_V1);
           StoreKeyFactory storeKeyFactory = Utils.getObj("com.github.ambry.commons.BlobIdFactory", mockClusterMap);
           FindTokenFactory factory = Utils.getObj("com.github.ambry.store.StoreFindTokenFactory", storeKeyFactory);
 
@@ -189,8 +187,7 @@ public class ServerHardDeleteTest {
    * @throws Exception
    */
   @Test
-  public void endToEndTestHardDeletes()
-      throws Exception {
+  public void endToEndTestHardDeletes() throws Exception {
     DataNodeId dataNodeId = mockClusterMap.getDataNodeIds().get(0);
     ArrayList<byte[]> usermetadata = new ArrayList<byte[]>(9);
     ArrayList<byte[]> data = new ArrayList<byte[]>(9);
@@ -229,8 +226,9 @@ public class ServerHardDeleteTest {
     PutRequest putRequest0 =
         new PutRequest(1, "client1", blobIdList.get(0), properties.get(0), ByteBuffer.wrap(usermetadata.get(0)),
             ByteBuffer.wrap(data.get(0)), properties.get(0).getBlobSize(), BlobType.DataBlob);
-    BlockingChannel channel = ServerTestUtil
-        .getBlockingChannelBasedOnPortType(new Port(dataNodeId.getPort(), PortType.PLAINTEXT), "localhost", null, null);
+    BlockingChannel channel =
+        ServerTestUtil.getBlockingChannelBasedOnPortType(new Port(dataNodeId.getPort(), PortType.PLAINTEXT),
+            "localhost", null, null);
     channel.connect();
     channel.send(putRequest0);
     InputStream putResponseStream = channel.receive().getInputStream();
@@ -331,7 +329,7 @@ public class ServerHardDeleteTest {
     try {
       GetRequest getRequest =
           new GetRequest(1, "clientid2", MessageFormatFlags.BlobProperties, partitionRequestInfoList,
-              GetOptions.Include_All);
+              GetOption.Include_All);
       channel.send(getRequest);
       InputStream stream = channel.receive().getInputStream();
       GetResponse resp = GetResponse.readFrom(new DataInputStream(stream), mockClusterMap);
@@ -343,7 +341,7 @@ public class ServerHardDeleteTest {
       }
 
       getRequest = new GetRequest(1, "clientid2", MessageFormatFlags.BlobUserMetadata, partitionRequestInfoList,
-          GetOptions.Include_All);
+          GetOption.Include_All);
       channel.send(getRequest);
       stream = channel.receive().getInputStream();
       resp = GetResponse.readFrom(new DataInputStream(stream), mockClusterMap);
@@ -354,7 +352,7 @@ public class ServerHardDeleteTest {
       }
 
       getRequest =
-          new GetRequest(1, "clientid2", MessageFormatFlags.Blob, partitionRequestInfoList, GetOptions.Include_All);
+          new GetRequest(1, "clientid2", MessageFormatFlags.Blob, partitionRequestInfoList, GetOption.Include_All);
       channel.send(getRequest);
       stream = channel.receive().getInputStream();
       resp = GetResponse.readFrom(new DataInputStream(stream), mockClusterMap);
@@ -451,7 +449,7 @@ public class ServerHardDeleteTest {
     try {
       GetRequest getRequest =
           new GetRequest(1, "clientid2", MessageFormatFlags.BlobProperties, partitionRequestInfoList,
-              GetOptions.Include_All);
+              GetOption.Include_All);
       channel.send(getRequest);
       InputStream stream = channel.receive().getInputStream();
       GetResponse resp = GetResponse.readFrom(new DataInputStream(stream), mockClusterMap);
@@ -463,7 +461,7 @@ public class ServerHardDeleteTest {
       }
 
       getRequest = new GetRequest(1, "clientid2", MessageFormatFlags.BlobUserMetadata, partitionRequestInfoList,
-          GetOptions.Include_All);
+          GetOption.Include_All);
       channel.send(getRequest);
       stream = channel.receive().getInputStream();
       resp = GetResponse.readFrom(new DataInputStream(stream), mockClusterMap);
@@ -474,7 +472,7 @@ public class ServerHardDeleteTest {
       }
 
       getRequest =
-          new GetRequest(1, "clientid2", MessageFormatFlags.Blob, partitionRequestInfoList, GetOptions.Include_All);
+          new GetRequest(1, "clientid2", MessageFormatFlags.Blob, partitionRequestInfoList, GetOption.Include_All);
       channel.send(getRequest);
       stream = channel.receive().getInputStream();
       resp = GetResponse.readFrom(new DataInputStream(stream), mockClusterMap);
