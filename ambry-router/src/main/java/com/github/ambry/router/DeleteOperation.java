@@ -23,13 +23,12 @@ import com.github.ambry.network.ResponseInfo;
 import com.github.ambry.protocol.DeleteRequest;
 import com.github.ambry.protocol.DeleteResponse;
 import com.github.ambry.utils.Time;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -80,7 +79,7 @@ class DeleteOperation {
    * @param time A {@link Time} reference.
    */
   DeleteOperation(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, ResponseHandler responsehandler,
-                  BlobId blobId, FutureResult<Void> futureResult, Callback<Void> callback, Time time) {
+      BlobId blobId, FutureResult<Void> futureResult, Callback<Void> callback, Time time) {
     this.submissionTimeMs = time.milliseconds();
     this.routerConfig = routerConfig;
     this.routerMetrics = routerMetrics;
@@ -170,8 +169,8 @@ class DeleteOperation {
         // not for its original request. We will immediately fail this operation.
         if (deleteResponse.getCorrelationId() != deleteRequest.getCorrelationId()) {
           logger.error("The correlation id in the DeleteResponse " + deleteResponse.getCorrelationId()
-              + " is not the same as the correlation id in the associated DeleteRequest: " + deleteRequest
-              .getCorrelationId());
+              + " is not the same as the correlation id in the associated DeleteRequest: "
+              + deleteRequest.getCorrelationId());
           routerMetrics.unknownReplicaResponseError.inc();
           setOperationException(
               new RouterException("Received wrong response that is not for the corresponding request.",
@@ -263,18 +262,20 @@ class DeleteOperation {
    * {@code DeleteOperation} based on the {@link RouterErrorCode}, and the source {@link ReplicaId}
    * for which the {@link RouterErrorCode} is generated.
    * @param replica The replica for which the RouterErrorCode was generated.
-   * @param newError {@link RouterErrorCode} that indicates the error for the replica.
+   * @param error {@link RouterErrorCode} that indicates the error for the replica.
    */
-  private void updateOperationState(ReplicaId replica, RouterErrorCode newError) {
+  private void updateOperationState(ReplicaId replica, RouterErrorCode error) {
     if (resolvedRouterErrorCode == null) {
-      resolvedRouterErrorCode = newError;
+      resolvedRouterErrorCode = error;
     } else {
-      if (getPrecedenceLevel(newError) < getPrecedenceLevel(resolvedRouterErrorCode)) {
-        resolvedRouterErrorCode = newError;
+      if (getPrecedenceLevel(error) < getPrecedenceLevel(resolvedRouterErrorCode)) {
+        resolvedRouterErrorCode = error;
       }
     }
     operationTracker.onResponse(replica, false);
-    routerMetrics.routerRequestErrorCount.inc();
+    if (error != RouterErrorCode.BlobDeleted && error != RouterErrorCode.BlobExpired) {
+      routerMetrics.routerRequestErrorCount.inc();
+    }
     routerMetrics.getDataNodeBasedMetrics(replica.getDataNodeId()).deleteRequestErrorCount.inc();
   }
 

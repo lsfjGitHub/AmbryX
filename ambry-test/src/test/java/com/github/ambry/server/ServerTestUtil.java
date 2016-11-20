@@ -14,28 +14,64 @@
 package com.github.ambry.server;
 
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.clustermap.*;
+import com.github.ambry.clustermap.DataNodeId;
+import com.github.ambry.clustermap.MockClusterMap;
+import com.github.ambry.clustermap.MockDataNodeId;
+import com.github.ambry.clustermap.MockPartitionId;
+import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.ServerErrorCode;
+import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ConnectionPoolConfig;
 import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.messageformat.*;
-import com.github.ambry.network.*;
-import com.github.ambry.protocol.*;
-import com.github.ambry.router.*;
+import com.github.ambry.messageformat.BlobData;
+import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.messageformat.BlobType;
+import com.github.ambry.messageformat.MessageFormatException;
+import com.github.ambry.messageformat.MessageFormatFlags;
+import com.github.ambry.messageformat.MessageFormatRecord;
+import com.github.ambry.network.BlockingChannel;
+import com.github.ambry.network.BlockingChannelConnectionPool;
+import com.github.ambry.network.ConnectionPool;
+import com.github.ambry.network.Port;
+import com.github.ambry.network.PortType;
+import com.github.ambry.network.SSLBlockingChannel;
+import com.github.ambry.protocol.DeleteRequest;
+import com.github.ambry.protocol.DeleteResponse;
+import com.github.ambry.protocol.GetOption;
+import com.github.ambry.protocol.GetRequest;
+import com.github.ambry.protocol.GetResponse;
+import com.github.ambry.protocol.PartitionRequestInfo;
+import com.github.ambry.protocol.PutRequest;
+import com.github.ambry.protocol.PutResponse;
+import com.github.ambry.router.Callback;
+import com.github.ambry.router.CopyingAsyncWritableChannel;
+import com.github.ambry.router.GetBlobOptions;
+import com.github.ambry.router.GetBlobResult;
+import com.github.ambry.router.NonBlockingRouterFactory;
+import com.github.ambry.router.ReadableStreamChannel;
+import com.github.ambry.router.Router;
 import com.github.ambry.store.FindToken;
 import com.github.ambry.store.FindTokenFactory;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.CrcInputStream;
 import com.github.ambry.utils.Utils;
-import org.junit.Assert;
-
-import javax.net.ssl.SSLSocketFactory;
-import java.io.*;
+import java.io.DataInputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.nio.ByteBuffer;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Properties;
+import java.util.Random;
+import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -43,15 +79,16 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import javax.net.ssl.SSLSocketFactory;
+import org.junit.Assert;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.*;
 
 
 public final class ServerTestUtil {
 
   protected static void endToEndTest(Port targetPort, String routerDatacenter, String sslEnabledDatacenters,
-                                     MockCluster cluster, SSLConfig clientSSLConfig, SSLSocketFactory clientSSLSocketFactory, Properties routerProps)
+      MockCluster cluster, SSLConfig clientSSLConfig, SSLSocketFactory clientSSLSocketFactory, Properties routerProps)
       throws InterruptedException, IOException, InstantiationException {
     try {
       MockClusterMap clusterMap = cluster.getClusterMap();
@@ -113,7 +150,7 @@ public final class ServerTestUtil {
       PartitionRequestInfo partitionRequestInfo = new PartitionRequestInfo(partition, ids);
       partitionRequestInfoList.add(partitionRequestInfo);
       GetRequest getRequest1 =
-          new GetRequest(1, "clientid2", MessageFormatFlags.BlobProperties, partitionRequestInfoList, GetOptions.None);
+          new GetRequest(1, "clientid2", MessageFormatFlags.BlobProperties, partitionRequestInfoList, GetOption.None);
       channel.send(getRequest1);
       InputStream stream = channel.receive().getInputStream();
       GetResponse resp1 = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
@@ -133,7 +170,7 @@ public final class ServerTestUtil {
       partitionRequestInfo = new PartitionRequestInfo(partition, ids);
       partitionRequestInfoList.add(partitionRequestInfo);
       getRequest1 = new GetRequest(1, "clientid2", MessageFormatFlags.BlobProperties, partitionRequestInfoList,
-          GetOptions.Include_Expired_Blobs);
+          GetOption.Include_Expired_Blobs);
       channel.send(getRequest1);
       stream = channel.receive().getInputStream();
       resp1 = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
@@ -155,7 +192,7 @@ public final class ServerTestUtil {
       partitionRequestInfoListExpired.add(partitionRequestInfoExpired);
       GetRequest getRequestExpired =
           new GetRequest(1, "clientid2", MessageFormatFlags.BlobProperties, partitionRequestInfoListExpired,
-              GetOptions.None);
+              GetOption.None);
       channel.send(getRequestExpired);
       InputStream streamExpired = channel.receive().getInputStream();
       GetResponse respExpired = GetResponse.readFrom(new DataInputStream(streamExpired), clusterMap);
@@ -170,7 +207,7 @@ public final class ServerTestUtil {
       partitionRequestInfoListExpired.add(partitionRequestInfoExpired);
       getRequestExpired =
           new GetRequest(1, "clientid2", MessageFormatFlags.BlobProperties, partitionRequestInfoListExpired,
-              GetOptions.Include_Expired_Blobs);
+              GetOption.Include_Expired_Blobs);
       channel.send(getRequestExpired);
       streamExpired = channel.receive().getInputStream();
       respExpired = GetResponse.readFrom(new DataInputStream(streamExpired), clusterMap);
@@ -185,8 +222,7 @@ public final class ServerTestUtil {
 
       // get user metadata
       GetRequest getRequest2 =
-          new GetRequest(1, "clientid2", MessageFormatFlags.BlobUserMetadata, partitionRequestInfoList,
-              GetOptions.None);
+          new GetRequest(1, "clientid2", MessageFormatFlags.BlobUserMetadata, partitionRequestInfoList, GetOption.None);
       channel.send(getRequest2);
       stream = channel.receive().getInputStream();
       GetResponse resp2 = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
@@ -199,7 +235,7 @@ public final class ServerTestUtil {
 
       // get blob info
       GetRequest getRequest3 =
-          new GetRequest(1, "clientid2", MessageFormatFlags.BlobInfo, partitionRequestInfoList, GetOptions.None);
+          new GetRequest(1, "clientid2", MessageFormatFlags.BlobInfo, partitionRequestInfoList, GetOption.None);
       channel.send(getRequest3);
       stream = channel.receive().getInputStream();
       GetResponse resp3 = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
@@ -230,7 +266,7 @@ public final class ServerTestUtil {
       partitionRequestInfo = new PartitionRequestInfo(partition, ids);
       partitionRequestInfoList.add(partitionRequestInfo);
       GetRequest getRequest4 =
-          new GetRequest(1, "clientid2", MessageFormatFlags.BlobProperties, partitionRequestInfoList, GetOptions.None);
+          new GetRequest(1, "clientid2", MessageFormatFlags.BlobProperties, partitionRequestInfoList, GetOption.None);
       channel.send(getRequest4);
       stream = channel.receive().getInputStream();
       GetResponse resp4 = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
@@ -243,11 +279,10 @@ public final class ServerTestUtil {
   }
 
   protected static void endToEndReplicationWithMultiNodeMultiPartitionTest(int interestedDataNodePortNumber,
-                                                                           Port dataNode1Port, Port dataNode2Port, Port dataNode3Port, MockCluster cluster, SSLConfig clientSSLConfig1,
-                                                                           SSLConfig clientSSLConfig2, SSLConfig clientSSLConfig3, SSLSocketFactory clientSSLSocketFactory1,
-                                                                           SSLSocketFactory clientSSLSocketFactory2, SSLSocketFactory clientSSLSocketFactory3,
-                                                                           MockNotificationSystem notificationSystem)
-      throws InterruptedException, IOException, InstantiationException {
+      Port dataNode1Port, Port dataNode2Port, Port dataNode3Port, MockCluster cluster, SSLConfig clientSSLConfig1,
+      SSLConfig clientSSLConfig2, SSLConfig clientSSLConfig3, SSLSocketFactory clientSSLSocketFactory1,
+      SSLSocketFactory clientSSLSocketFactory2, SSLSocketFactory clientSSLSocketFactory3,
+      MockNotificationSystem notificationSystem) throws InterruptedException, IOException, InstantiationException {
     // interestedDataNodePortNumber is used to locate the datanode and hence has to be PlainTextPort
     try {
       MockClusterMap clusterMap = cluster.getClusterMap();
@@ -319,7 +354,7 @@ public final class ServerTestUtil {
           partitionRequestInfoList.add(partitionRequestInfo);
           GetRequest getRequest =
               new GetRequest(1, "clientid2", MessageFormatFlags.BlobProperties, partitionRequestInfoList,
-                  GetOptions.None);
+                  GetOption.None);
           channel.send(getRequest);
           InputStream stream = channel.receive().getInputStream();
           GetResponse resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
@@ -338,7 +373,7 @@ public final class ServerTestUtil {
           partitionRequestInfo = new PartitionRequestInfo(blobIds.get(j).getPartition(), ids);
           partitionRequestInfoList.add(partitionRequestInfo);
           getRequest = new GetRequest(1, "clientid2", MessageFormatFlags.BlobUserMetadata, partitionRequestInfoList,
-              GetOptions.None);
+              GetOption.None);
           channel.send(getRequest);
           stream = channel.receive().getInputStream();
           resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
@@ -357,7 +392,7 @@ public final class ServerTestUtil {
           partitionRequestInfo = new PartitionRequestInfo(blobIds.get(j).getPartition(), ids);
           partitionRequestInfoList.add(partitionRequestInfo);
           getRequest =
-              new GetRequest(1, "clientid2", MessageFormatFlags.Blob, partitionRequestInfoList, GetOptions.None);
+              new GetRequest(1, "clientid2", MessageFormatFlags.Blob, partitionRequestInfoList, GetOption.None);
           channel.send(getRequest);
           stream = channel.receive().getInputStream();
           resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
@@ -421,7 +456,7 @@ public final class ServerTestUtil {
           PartitionRequestInfo partitionRequestInfo = new PartitionRequestInfo(deletedId.getPartition(), ids);
           partitionRequestInfoList.add(partitionRequestInfo);
           GetRequest getRequest =
-              new GetRequest(1, "clientid2", MessageFormatFlags.Blob, partitionRequestInfoList, GetOptions.None);
+              new GetRequest(1, "clientid2", MessageFormatFlags.Blob, partitionRequestInfoList, GetOption.None);
           channel.send(getRequest);
           InputStream stream = channel.receive().getInputStream();
           GetResponse resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
@@ -471,8 +506,7 @@ public final class ServerTestUtil {
         PartitionRequestInfo partitionRequestInfo = new PartitionRequestInfo(blobIds.get(j).getPartition(), ids);
         partitionRequestInfoList.add(partitionRequestInfo);
         GetRequest getRequest =
-            new GetRequest(1, "clientid2", MessageFormatFlags.BlobProperties, partitionRequestInfoList,
-                GetOptions.None);
+            new GetRequest(1, "clientid2", MessageFormatFlags.BlobProperties, partitionRequestInfoList, GetOption.None);
         channel1.send(getRequest);
         InputStream stream = channel1.receive().getInputStream();
         GetResponse resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
@@ -496,7 +530,7 @@ public final class ServerTestUtil {
         partitionRequestInfo = new PartitionRequestInfo(blobIds.get(j).getPartition(), ids);
         partitionRequestInfoList.add(partitionRequestInfo);
         getRequest = new GetRequest(1, "clientid2", MessageFormatFlags.BlobUserMetadata, partitionRequestInfoList,
-            GetOptions.None);
+            GetOption.None);
         channel1.send(getRequest);
         stream = channel1.receive().getInputStream();
         resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
@@ -518,7 +552,7 @@ public final class ServerTestUtil {
         partitionRequestInfoList.clear();
         partitionRequestInfo = new PartitionRequestInfo(blobIds.get(j).getPartition(), ids);
         partitionRequestInfoList.add(partitionRequestInfo);
-        getRequest = new GetRequest(1, "clientid2", MessageFormatFlags.Blob, partitionRequestInfoList, GetOptions.None);
+        getRequest = new GetRequest(1, "clientid2", MessageFormatFlags.Blob, partitionRequestInfoList, GetOption.None);
         channel1.send(getRequest);
         stream = channel1.receive().getInputStream();
         resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
@@ -581,8 +615,7 @@ public final class ServerTestUtil {
         PartitionRequestInfo partitionRequestInfo = new PartitionRequestInfo(blobIds.get(j).getPartition(), ids);
         partitionRequestInfoList.add(partitionRequestInfo);
         GetRequest getRequest =
-            new GetRequest(1, "clientid2", MessageFormatFlags.BlobProperties, partitionRequestInfoList,
-                GetOptions.None);
+            new GetRequest(1, "clientid2", MessageFormatFlags.BlobProperties, partitionRequestInfoList, GetOption.None);
         channel1.send(getRequest);
         InputStream stream = channel1.receive().getInputStream();
         GetResponse resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
@@ -606,7 +639,7 @@ public final class ServerTestUtil {
         partitionRequestInfo = new PartitionRequestInfo(blobIds.get(j).getPartition(), ids);
         partitionRequestInfoList.add(partitionRequestInfo);
         getRequest = new GetRequest(1, "clientid2", MessageFormatFlags.BlobUserMetadata, partitionRequestInfoList,
-            GetOptions.None);
+            GetOption.None);
         channel1.send(getRequest);
         stream = channel1.receive().getInputStream();
         resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
@@ -628,7 +661,7 @@ public final class ServerTestUtil {
         partitionRequestInfoList.clear();
         partitionRequestInfo = new PartitionRequestInfo(blobIds.get(j).getPartition(), ids);
         partitionRequestInfoList.add(partitionRequestInfo);
-        getRequest = new GetRequest(1, "clientid2", MessageFormatFlags.Blob, partitionRequestInfoList, GetOptions.None);
+        getRequest = new GetRequest(1, "clientid2", MessageFormatFlags.Blob, partitionRequestInfoList, GetOption.None);
         channel1.send(getRequest);
         stream = channel1.receive().getInputStream();
         resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
@@ -663,9 +696,8 @@ public final class ServerTestUtil {
   }
 
   protected static void endToEndReplicationWithMultiNodeMultiPartitionMultiDCTest(String sourceDatacenter,
-                                                                                  String sslEnabledDatacenters, PortType portType, MockCluster cluster, MockNotificationSystem notificationSystem,
-                                                                                  Properties routerProps)
-      throws Exception {
+      String sslEnabledDatacenters, PortType portType, MockCluster cluster, MockNotificationSystem notificationSystem,
+      Properties routerProps) throws Exception {
     Properties props = new Properties();
     props.setProperty("router.hostname", "localhost");
     props.setProperty("router.datacenter.name", sourceDatacenter);
@@ -688,8 +720,8 @@ public final class ServerTestUtil {
       final byte[] blob = new byte[size];
       new Random().nextBytes(metadata);
       new Random().nextBytes(blob);
-      Future<String> future = router
-          .putBlob(properties, metadata, new ByteBufferReadableStreamChannel(ByteBuffer.wrap(blob)),
+      Future<String> future =
+          router.putBlob(properties, metadata, new ByteBufferReadableStreamChannel(ByteBuffer.wrap(blob)),
               new Callback<String>() {
                 @Override
                 public void onCompletion(String result, Exception exception) {
@@ -713,10 +745,11 @@ public final class ServerTestUtil {
     assertEquals("Did not put expected number of blobs", numberOfRequestsToSend, payloadQueue.size());
     Properties sslProps = new Properties();
     sslProps.putAll(routerProps);
-    sslProps.setProperty("ssl.enabled.datacenters", sslEnabledDatacenters);
+    sslProps.setProperty("clustermap.ssl.enabled.datacenters", sslEnabledDatacenters);
+    VerifiableProperties vProps = new VerifiableProperties(sslProps);
     ConnectionPool connectionPool =
         new BlockingChannelConnectionPool(new ConnectionPoolConfig(new VerifiableProperties(new Properties())),
-            new SSLConfig(new VerifiableProperties(sslProps)), new MetricRegistry());
+            new SSLConfig(vProps), new ClusterMapConfig(vProps), new MetricRegistry());
     CountDownLatch verifierLatch = new CountDownLatch(numberOfVerifierThreads);
     AtomicInteger totalRequests = new AtomicInteger(numberOfRequestsToSend);
     AtomicInteger verifiedRequests = new AtomicInteger(0);
@@ -735,9 +768,9 @@ public final class ServerTestUtil {
   }
 
   protected static void endToEndReplicationWithMultiNodeSinglePartitionTest(String routerDatacenter,
-                                                                            String sslEnabledDatacenters, int interestedDataNodePortNumber, Port dataNode1Port, Port dataNode2Port,
-                                                                            Port dataNode3Port, MockCluster cluster, SSLConfig clientSSLConfig1, SSLSocketFactory clientSSLSocketFactory1,
-                                                                            MockNotificationSystem notificationSystem, Properties routerProps)
+      String sslEnabledDatacenters, int interestedDataNodePortNumber, Port dataNode1Port, Port dataNode2Port,
+      Port dataNode3Port, MockCluster cluster, SSLConfig clientSSLConfig1, SSLSocketFactory clientSSLSocketFactory1,
+      MockNotificationSystem notificationSystem, Properties routerProps)
       throws InterruptedException, IOException, InstantiationException {
     // interestedDataNodePortNumber is used to locate the datanode and hence has to be PlainText port
     try {
@@ -837,7 +870,7 @@ public final class ServerTestUtil {
       PartitionRequestInfo partitionRequestInfo = new PartitionRequestInfo(mockPartitionId, ids);
       partitionRequestInfoList.add(partitionRequestInfo);
       GetRequest getRequest1 =
-          new GetRequest(1, "clientid2", MessageFormatFlags.BlobProperties, partitionRequestInfoList, GetOptions.None);
+          new GetRequest(1, "clientid2", MessageFormatFlags.BlobProperties, partitionRequestInfoList, GetOption.None);
       channel2.send(getRequest1);
       InputStream stream = channel2.receive().getInputStream();
       GetResponse resp1 = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
@@ -854,8 +887,7 @@ public final class ServerTestUtil {
       ids.clear();
       ids.add(blobId2);
       GetRequest getRequest2 =
-          new GetRequest(1, "clientid2", MessageFormatFlags.BlobUserMetadata, partitionRequestInfoList,
-              GetOptions.None);
+          new GetRequest(1, "clientid2", MessageFormatFlags.BlobUserMetadata, partitionRequestInfoList, GetOption.None);
       channel1.send(getRequest2);
       stream = channel1.receive().getInputStream();
       GetResponse resp2 = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
@@ -872,7 +904,7 @@ public final class ServerTestUtil {
       ids.clear();
       ids.add(blobId1);
       GetRequest getRequest3 =
-          new GetRequest(1, "clientid2", MessageFormatFlags.Blob, partitionRequestInfoList, GetOptions.None);
+          new GetRequest(1, "clientid2", MessageFormatFlags.Blob, partitionRequestInfoList, GetOption.None);
       channel3.send(getRequest3);
       stream = channel3.receive().getInputStream();
       GetResponse resp3 = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
@@ -893,9 +925,8 @@ public final class ServerTestUtil {
       // Use router to get the blob
       Properties routerProperties = getRouterProps(routerDatacenter);
       routerProperties.putAll(routerProps);
-      Router router =
-          new NonBlockingRouterFactory(new VerifiableProperties(routerProperties), clusterMap, notificationSystem)
-              .getRouter();
+      Router router = new NonBlockingRouterFactory(new VerifiableProperties(routerProperties), clusterMap,
+          notificationSystem).getRouter();
       checkBlobId(router, blobId1, data);
       checkBlobId(router, blobId2, data);
       checkBlobId(router, blobId3, data);
@@ -914,7 +945,7 @@ public final class ServerTestUtil {
       partitionRequestInfo = new PartitionRequestInfo(mockPartitionId, ids);
       partitionRequestInfoList.add(partitionRequestInfo);
       GetRequest getRequest4 =
-          new GetRequest(1, "clientid2", MessageFormatFlags.BlobProperties, partitionRequestInfoList, GetOptions.None);
+          new GetRequest(1, "clientid2", MessageFormatFlags.BlobProperties, partitionRequestInfoList, GetOption.None);
       channel3.send(getRequest4);
       stream = channel3.receive().getInputStream();
       GetResponse resp4 = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
@@ -935,7 +966,7 @@ public final class ServerTestUtil {
       partitionRequestInfo = new PartitionRequestInfo(partition, ids);
       partitionRequestInfoList.add(partitionRequestInfo);
       GetRequest getRequest5 =
-          new GetRequest(1, "clientid2", MessageFormatFlags.Blob, partitionRequestInfoList, GetOptions.None);
+          new GetRequest(1, "clientid2", MessageFormatFlags.Blob, partitionRequestInfoList, GetOption.None);
       channel3.send(getRequest5);
       stream = channel3.receive().getInputStream();
       GetResponse resp5 = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
@@ -1100,8 +1131,7 @@ public final class ServerTestUtil {
    * @throws Exception
    */
   private static void checkReplicaTokens(MockClusterMap clusterMap, DataNodeId dataNodeId, long targetOffset,
-                                         String targetPartition)
-      throws Exception {
+      String targetPartition) throws Exception {
     List<String> mountPaths = ((MockDataNodeId) dataNodeId).getMountPaths();
 
     // we should have an entry for each partition - remote replica pair
@@ -1114,9 +1144,8 @@ public final class ServerTestUtil {
         numRemoteNodes = peerReplicas.size();
       }
       for (ReplicaId peerReplica : peerReplicas) {
-        completeSetToCheck.add(replicaId.getPartitionId().toString() +
-            peerReplica.getDataNodeId().getHostname() +
-            peerReplica.getDataNodeId().getPort());
+        completeSetToCheck.add(replicaId.getPartitionId().toString() + peerReplica.getDataNodeId().getHostname()
+            + peerReplica.getDataNodeId().getPort());
       }
     }
 
@@ -1192,8 +1221,7 @@ public final class ServerTestUtil {
     }
   }
 
-  private static void checkBlobId(Router router, BlobId blobId, byte[] data)
-      throws Exception {
+  private static void checkBlobId(Router router, BlobId blobId, byte[] data) throws Exception {
     GetBlobResult result = router.getBlob(blobId.getID(), new GetBlobOptions()).get(1, TimeUnit.SECONDS);
     ReadableStreamChannel blob = result.getBlobDataChannel();
     assertEquals("Size does not match that of data", data.length,
@@ -1204,8 +1232,7 @@ public final class ServerTestUtil {
   }
 
   private static void checkBlobContent(MockClusterMap clusterMap, BlobId blobId, BlockingChannel channel,
-                                       byte[] dataToCheck)
-      throws IOException, MessageFormatException {
+      byte[] dataToCheck) throws IOException, MessageFormatException {
     ArrayList<BlobId> listIds = new ArrayList<BlobId>();
     listIds.add(blobId);
     ArrayList<PartitionRequestInfo> partitionRequestInfoList = new ArrayList<PartitionRequestInfo>();
@@ -1213,7 +1240,7 @@ public final class ServerTestUtil {
     PartitionRequestInfo partitionRequestInfo = new PartitionRequestInfo(blobId.getPartition(), listIds);
     partitionRequestInfoList.add(partitionRequestInfo);
     GetRequest getRequest3 =
-        new GetRequest(1, "clientid2", MessageFormatFlags.Blob, partitionRequestInfoList, GetOptions.None);
+        new GetRequest(1, "clientid2", MessageFormatFlags.Blob, partitionRequestInfoList, GetOption.None);
     channel.send(getRequest3);
     InputStream stream = channel.receive().getInputStream();
     GetResponse resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
@@ -1258,7 +1285,7 @@ public final class ServerTestUtil {
    * @return BlockingChannel
    */
   protected static BlockingChannel getBlockingChannelBasedOnPortType(Port targetPort, String hostName,
-                                                                     SSLSocketFactory sslSocketFactory, SSLConfig sslConfig) {
+      SSLSocketFactory sslSocketFactory, SSLConfig sslConfig) {
     BlockingChannel channel = null;
     if (targetPort.getPortType() == PortType.PLAINTEXT) {
       channel = new BlockingChannel(hostName, targetPort.getPort(), 10000, 10000, 10000, 2000);

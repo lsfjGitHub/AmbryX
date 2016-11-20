@@ -27,9 +27,6 @@ import com.github.ambry.utils.ByteBufferChannel;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.ByteBufferOutputStream;
 import com.github.ambry.utils.Utils;
-import org.junit.Assert;
-import org.junit.Test;
-
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
@@ -40,13 +37,14 @@ import java.nio.channels.WritableByteChannel;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
+import org.junit.Assert;
+import org.junit.Test;
 
 
 class MockFindTokenFactory implements FindTokenFactory {
 
   @Override
-  public FindToken getFindToken(DataInputStream stream)
-      throws IOException {
+  public FindToken getFindToken(DataInputStream stream) throws IOException {
     return new MockFindToken(stream);
   }
 
@@ -65,8 +63,7 @@ class MockFindToken implements FindToken {
     this.bytesRead = bytesRead;
   }
 
-  public MockFindToken(DataInputStream stream)
-      throws IOException {
+  public MockFindToken(DataInputStream stream) throws IOException {
     this.index = stream.readInt();
     this.bytesRead = stream.readLong();
   }
@@ -92,7 +89,7 @@ class InvalidVersionPutRequest extends PutRequest {
   static final short Put_Request_Invalid_version = 0;
 
   public InvalidVersionPutRequest(int correlationId, String clientId, BlobId blobId, BlobProperties properties,
-                                  ByteBuffer usermetadata, ByteBuffer blob, long blobSize, BlobType blobType) {
+      ByteBuffer usermetadata, ByteBuffer blob, long blobSize, BlobType blobType) {
     super(correlationId, clientId, blobId, properties, usermetadata, blob, blobSize, blobType);
     versionId = Put_Request_Invalid_version;
   }
@@ -102,7 +99,7 @@ public class RequestResponseTest {
   private final Random random = new Random();
 
   private void testPutRequest(MockClusterMap clusterMap, int correlationId, String clientId, BlobId blobId,
-                              BlobProperties blobProperties, byte[] userMetadata, BlobType blobType, byte[] blob, int blobSize)
+      BlobProperties blobProperties, byte[] userMetadata, BlobType blobType, byte[] blob, int blobSize)
       throws IOException {
     // This PutRequest is created just to get the size.
     int sizeInBytes =
@@ -146,8 +143,7 @@ public class RequestResponseTest {
   }
 
   private void testPutRequestInvalidVersion(MockClusterMap clusterMap, int correlationId, String clientId,
-                                            BlobId blobId, BlobProperties blobProperties, byte[] userMetadata, byte[] blob)
-      throws IOException {
+      BlobId blobId, BlobProperties blobProperties, byte[] userMetadata, byte[] blob) throws IOException {
     int sizeInBlobProperties = (int) blobProperties.getBlobSize();
     PutRequest request =
         new InvalidVersionPutRequest(correlationId, clientId, blobId, blobProperties, ByteBuffer.wrap(userMetadata),
@@ -168,8 +164,7 @@ public class RequestResponseTest {
   }
 
   @Test
-  public void putRequestResponseTest()
-      throws IOException {
+  public void putRequestResponseTest() throws IOException {
     Random rnd = new Random();
     MockClusterMap clusterMap = new MockClusterMap();
 
@@ -225,8 +220,7 @@ public class RequestResponseTest {
   }
 
   @Test
-  public void getRequestResponseTest()
-      throws IOException {
+  public void getRequestResponseTest() throws IOException {
     MockClusterMap clusterMap = new MockClusterMap();
     BlobId id1 = new BlobId(clusterMap.getWritablePartitionIds().get(0));
     ArrayList<BlobId> blobIdList = new ArrayList<BlobId>();
@@ -235,7 +229,7 @@ public class RequestResponseTest {
     ArrayList<PartitionRequestInfo> partitionRequestInfoList = new ArrayList<PartitionRequestInfo>();
     partitionRequestInfoList.add(partitionRequestInfo1);
     GetRequest getRequest =
-        new GetRequest(1234, "clientId", MessageFormatFlags.Blob, partitionRequestInfoList, GetOptions.None);
+        new GetRequest(1234, "clientId", MessageFormatFlags.Blob, partitionRequestInfoList, GetOption.None);
     ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
     WritableByteChannel writableByteChannel = Channels.newChannel(outputStream);
     do {
@@ -277,13 +271,15 @@ public class RequestResponseTest {
         deserializedGetResponse.getPartitionResponseInfoList().get(0).getMessageInfoList().get(0).getSize(), 1000);
     Assert.assertEquals(
         deserializedGetResponse.getPartitionResponseInfoList().get(0).getMessageInfoList().get(0).getStoreKey(), id1);
-    Assert.assertEquals(deserializedGetResponse.getPartitionResponseInfoList().get(0).getMessageInfoList().get(0)
+    Assert.assertEquals(deserializedGetResponse.getPartitionResponseInfoList()
+        .get(0)
+        .getMessageInfoList()
+        .get(0)
         .getExpirationTimeInMs(), 1000);
   }
 
   @Test
-  public void deleteRequestResponseTest()
-      throws IOException {
+  public void deleteRequestResponseTest() throws IOException {
     MockClusterMap clusterMap = new MockClusterMap();
     BlobId id1 = new BlobId(clusterMap.getWritablePartitionIds().get(0));
     DeleteRequest deleteRequest = new DeleteRequest(1234, "client", id1);
@@ -311,8 +307,7 @@ public class RequestResponseTest {
   }
 
   @Test
-  public void replicaMetadataRequestTest()
-      throws IOException {
+  public void replicaMetadataRequestTest() throws IOException {
     MockClusterMap clusterMap = new MockClusterMap();
     BlobId id1 = new BlobId(clusterMap.getWritablePartitionIds().get(0));
     List<ReplicaMetadataRequestInfo> replicaMetadataRequestInfoList = new ArrayList<ReplicaMetadataRequestInfo>();
@@ -328,8 +323,8 @@ public class RequestResponseTest {
     buffer.flip();
     buffer.getLong();
     buffer.getShort();
-    ReplicaMetadataRequest replicaMetadataRequestFromBytes = ReplicaMetadataRequest
-        .readFrom(new DataInputStream(new ByteBufferInputStream(buffer)), new MockClusterMap(),
+    ReplicaMetadataRequest replicaMetadataRequestFromBytes =
+        ReplicaMetadataRequest.readFrom(new DataInputStream(new ByteBufferInputStream(buffer)), new MockClusterMap(),
             new MockFindTokenFactory());
     Assert.assertEquals(replicaMetadataRequestFromBytes.getMaxTotalSizeOfEntriesInBytes(), 1000);
     Assert.assertEquals(replicaMetadataRequestFromBytes.getReplicaMetadataRequestInfoList().size(), 1);

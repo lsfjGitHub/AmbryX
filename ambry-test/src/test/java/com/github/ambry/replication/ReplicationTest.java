@@ -14,32 +14,72 @@
 package com.github.ambry.replication;
 
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.clustermap.*;
+import com.github.ambry.clustermap.DataNodeId;
+import com.github.ambry.clustermap.MockClusterMap;
+import com.github.ambry.clustermap.MockReplicaId;
+import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.config.ReplicationConfig;
-import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.MessageFormatException;
 import com.github.ambry.messageformat.MessageFormatInputStream;
 import com.github.ambry.messageformat.PutMessageFormatInputStream;
-import com.github.ambry.network.*;
-import com.github.ambry.protocol.*;
+import com.github.ambry.network.ChannelOutput;
+import com.github.ambry.network.ConnectedChannel;
+import com.github.ambry.network.ConnectionPool;
+import com.github.ambry.network.ConnectionPoolTimeoutException;
+import com.github.ambry.network.Port;
+import com.github.ambry.network.PortType;
+import com.github.ambry.network.Send;
+import com.github.ambry.protocol.GetRequest;
+import com.github.ambry.protocol.GetResponse;
+import com.github.ambry.protocol.PartitionRequestInfo;
+import com.github.ambry.protocol.PartitionResponseInfo;
+import com.github.ambry.protocol.ReplicaMetadataRequest;
+import com.github.ambry.protocol.ReplicaMetadataRequestInfo;
+import com.github.ambry.protocol.ReplicaMetadataResponse;
+import com.github.ambry.protocol.ReplicaMetadataResponseInfo;
 import com.github.ambry.protocol.Response;
-import com.github.ambry.store.*;
-import com.github.ambry.utils.*;
-import org.junit.Assert;
-import org.junit.Test;
-
+import com.github.ambry.store.FindInfo;
+import com.github.ambry.store.FindToken;
+import com.github.ambry.store.MessageInfo;
+import com.github.ambry.store.MessageReadSet;
+import com.github.ambry.store.MessageWriteSet;
+import com.github.ambry.store.Store;
+import com.github.ambry.store.StoreException;
+import com.github.ambry.store.StoreGetOptions;
+import com.github.ambry.store.StoreInfo;
+import com.github.ambry.store.StoreKey;
+import com.github.ambry.store.StoreKeyFactory;
+import com.github.ambry.store.Write;
+import com.github.ambry.utils.ByteBufferInputStream;
+import com.github.ambry.utils.ByteBufferOutputStream;
+import com.github.ambry.utils.MockTime;
+import com.github.ambry.utils.SystemTime;
+import com.github.ambry.utils.Time;
+import com.github.ambry.utils.Utils;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.nio.channels.ReadableByteChannel;
 import java.nio.channels.WritableByteChannel;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.EnumSet;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
+import java.util.Random;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.junit.Assert;
+import org.junit.Test;
 
 
 public class ReplicationTest {
@@ -55,8 +95,7 @@ public class ReplicationTest {
     }
 
     @Override
-    public long writeTo(int index, WritableByteChannel channel, long relativeOffset, long maxSize)
-        throws IOException {
+    public long writeTo(int index, WritableByteChannel channel, long relativeOffset, long maxSize) throws IOException {
       ByteBuffer bufferToWrite = bytebuffers.get(0);
       bufferToWrite.position((int) relativeOffset);
       bufferToWrite.limit((int) Math.min(maxSize, bufferToWrite.capacity()));
@@ -94,27 +133,19 @@ public class ReplicationTest {
       }
 
       @Override
-      public int appendFrom(ByteBuffer buffer)
-          throws IOException {
+      public int appendFrom(ByteBuffer buffer) throws IOException {
         buflist.get(index).put(buffer);
         index++;
         return buffer.capacity();
       }
 
       @Override
-      public void appendFrom(ReadableByteChannel channel, long size)
-          throws IOException {
+      public void appendFrom(ReadableByteChannel channel, long size) throws IOException {
         int sizeRead = 0;
         while (sizeRead < size) {
           sizeRead += channel.read(buflist.get(index++));
         }
         // @TODO: Is this doing the right thing?
-      }
-
-      @Override
-      public void writeFrom(ReadableByteChannel channel, long offset, long size)
-          throws IOException {
-        throw new IllegalArgumentException("Not implemented");
       }
     }
 
@@ -152,14 +183,12 @@ public class ReplicationTest {
     }
 
     @Override
-    public void start()
-        throws StoreException {
+    public void start() throws StoreException {
 
     }
 
     @Override
-    public StoreInfo get(List<? extends StoreKey> ids, EnumSet<StoreGetOptions> getOptions)
-        throws StoreException {
+    public StoreInfo get(List<? extends StoreKey> ids, EnumSet<StoreGetOptions> getOptions) throws StoreException {
       List<MessageInfo> infoOutput = new ArrayList<MessageInfo>();
       List<ByteBuffer> buffers = new ArrayList<ByteBuffer>();
       List<StoreKey> keys = new ArrayList<StoreKey>();
@@ -178,8 +207,7 @@ public class ReplicationTest {
     }
 
     @Override
-    public void put(MessageWriteSet messageSetToWrite)
-        throws StoreException {
+    public void put(MessageWriteSet messageSetToWrite) throws StoreException {
       List<MessageInfo> messageInfoListTemp = messageSetToWrite.getMessageSetInfo();
       List<ByteBuffer> buffersToWrite = new ArrayList<ByteBuffer>();
       for (MessageInfo messageInfo : messageInfoListTemp) {
@@ -199,8 +227,7 @@ public class ReplicationTest {
     }
 
     @Override
-    public void delete(MessageWriteSet messageSetToDelete)
-        throws StoreException {
+    public void delete(MessageWriteSet messageSetToDelete) throws StoreException {
       int index = 0;
       MessageInfo messageInfoFound = null;
       for (MessageInfo messageInfo : messageInfoList) {
@@ -215,8 +242,7 @@ public class ReplicationTest {
     }
 
     @Override
-    public FindInfo findEntriesSince(FindToken token, long maxSizeOfEntries)
-        throws StoreException {
+    public FindInfo findEntriesSince(FindToken token, long maxSizeOfEntries) throws StoreException {
       MockFindToken tokenmock = (MockFindToken) token;
       List<MessageInfo> entriesToReturn = new ArrayList<MessageInfo>();
       long currentSizeOfEntriesInBytes = 0;
@@ -238,8 +264,7 @@ public class ReplicationTest {
     }
 
     @Override
-    public Set<StoreKey> findMissingKeys(List<StoreKey> keys)
-        throws StoreException {
+    public Set<StoreKey> findMissingKeys(List<StoreKey> keys) throws StoreException {
       Set<StoreKey> keysMissing = new HashSet<StoreKey>();
       for (StoreKey key : keys) {
         boolean found = false;
@@ -257,8 +282,7 @@ public class ReplicationTest {
     }
 
     @Override
-    public boolean isKeyDeleted(StoreKey key)
-        throws StoreException {
+    public boolean isKeyDeleted(StoreKey key) throws StoreException {
       for (MessageInfo messageInfo : messageInfoList) {
         if (messageInfo.getStoreKey().equals(key) && messageInfo.isDeleted()) {
           return true;
@@ -273,24 +297,7 @@ public class ReplicationTest {
     }
 
     @Override
-    public void shutdown()
-        throws StoreException {
-    }
-  }
-
-  class MockStoreManager extends StoreManager {
-    Map<PartitionId, MockStore> stores;
-
-    public MockStoreManager(StoreConfig config, Scheduler scheduler, MetricRegistry registry, List<ReplicaId> replicas,
-                            StoreKeyFactory factory, MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete,
-                            Map<PartitionId, MockStore> stores)
-        throws StoreException {
-      super(config, scheduler, registry, replicas, factory, recovery, hardDelete, SystemTime.getInstance());
-      this.stores = stores;
-    }
-
-    public Store getStore(PartitionId id) {
-      return stores.get(id);
+    public void shutdown() throws StoreException {
     }
   }
 
@@ -312,8 +319,7 @@ public class ReplicationTest {
       }
 
       @Override
-      public long writeTo(WritableByteChannel channel)
-          throws IOException {
+      public long writeTo(WritableByteChannel channel) throws IOException {
         long written = channel.write(bufferList.get(index));
         index++;
         return written;
@@ -341,7 +347,7 @@ public class ReplicationTest {
     int maxSizeToReturn;
 
     public MockConnection(String host, int port, Map<PartitionId, List<MessageInfo>> messageInfoList,
-                          Map<PartitionId, List<ByteBuffer>> bufferList, int maxSizeToReturn) {
+        Map<PartitionId, List<ByteBuffer>> bufferList, int maxSizeToReturn) {
       this.messageInfoForPartition = messageInfoList;
       this.bufferListForPartition = bufferList;
       this.host = host;
@@ -350,8 +356,7 @@ public class ReplicationTest {
     }
 
     @Override
-    public void send(Send request)
-        throws IOException {
+    public void send(Send request) throws IOException {
       if (request instanceof ReplicaMetadataRequest) {
         metadataRequest = (ReplicaMetadataRequest) request;
       }
@@ -379,8 +384,7 @@ public class ReplicationTest {
     }
 
     @Override
-    public ChannelOutput receive()
-        throws IOException {
+    public ChannelOutput receive() throws IOException {
       Response response = null;
       if (metadataRequest != null) {
         List<ReplicaMetadataResponseInfo> replicaMetadataResponseInfoList =
@@ -444,7 +448,7 @@ public class ReplicationTest {
     int maxEntriesToReturn;
 
     public MockConnectionPool(Map<String, Map<PartitionId, List<MessageInfo>>> messageInfoList,
-                              Map<String, Map<PartitionId, List<ByteBuffer>>> byteBufferList, int maxEntriesToReturn) {
+        Map<String, Map<PartitionId, List<ByteBuffer>>> byteBufferList, int maxEntriesToReturn) {
       this.messageInfoList = messageInfoList;
       this.byteBufferList = byteBufferList;
       this.maxEntriesToReturn = maxEntriesToReturn;
@@ -477,8 +481,7 @@ public class ReplicationTest {
   }
 
   @Test
-  public void replicaThreadTest()
-      throws InterruptedException, IOException {
+  public void replicaThreadTest() throws InterruptedException, IOException {
     try {
       Random random = new Random();
       MockClusterMap clusterMap = new MockClusterMap();
@@ -678,8 +681,7 @@ public class ReplicationTest {
   }
 
   @Test
-  public void replicaTokenTest()
-      throws InterruptedException {
+  public void replicaTokenTest() throws InterruptedException {
     final long tokenPersistInterval = 100;
     Time time = new MockTime();
     MockFindToken token1 = new MockFindToken(0, 0);
@@ -732,8 +734,7 @@ public class ReplicationTest {
   }
 
   @Test
-  public void replicaThreadTestForExpiredBlobs()
-      throws InterruptedException, IOException {
+  public void replicaThreadTestForExpiredBlobs() throws InterruptedException, IOException {
     try {
       Random random = new Random();
       MockClusterMap clusterMap = new MockClusterMap();
@@ -949,8 +950,7 @@ public class ReplicationTest {
   }
 
   @Test
-  public void replicaThreadTestWithCorruptMessages()
-      throws InterruptedException, IOException {
+  public void replicaThreadTestWithCorruptMessages() throws InterruptedException, IOException {
     try {
       Random random = new Random();
       MockClusterMap clusterMap = new MockClusterMap();

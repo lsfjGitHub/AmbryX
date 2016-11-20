@@ -14,7 +14,6 @@
 package com.github.ambry.protocol;
 
 import com.github.ambry.commons.ServerErrorCode;
-
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.WritableByteChannel;
@@ -28,7 +27,7 @@ public abstract class Response extends RequestOrResponse {
   private static final int Error_Size_InBytes = 2;
 
   public Response(RequestOrResponseType type, short requestResponseVersion, int correlationId, String clientId,
-                  ServerErrorCode error) {
+      ServerErrorCode error) {
     super(type, requestResponseVersion, correlationId, clientId);
     this.error = error;
   }
@@ -44,8 +43,7 @@ public abstract class Response extends RequestOrResponse {
   }
 
   @Override
-  public long writeTo(WritableByteChannel channel)
-      throws IOException {
+  public long writeTo(WritableByteChannel channel) throws IOException {
     if (bufferToSend == null) {
       bufferToSend = ByteBuffer.allocate((int) sizeInBytes());
       writeHeader();

@@ -14,7 +14,11 @@
 package com.github.ambry.tools.admin;
 
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.clustermap.*;
+import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.ClusterMapManager;
+import com.github.ambry.clustermap.DataNodeId;
+import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.config.ClusterMapConfig;
@@ -23,22 +27,31 @@ import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.messageformat.BlobType;
-import com.github.ambry.network.*;
+import com.github.ambry.network.BlockingChannelConnectionPool;
+import com.github.ambry.network.ConnectedChannel;
+import com.github.ambry.network.ConnectionPool;
+import com.github.ambry.network.Port;
+import com.github.ambry.network.PortType;
 import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.protocol.PutResponse;
 import com.github.ambry.utils.ByteBufferInputStream;
-import joptsimple.ArgumentAcceptingOptionSpec;
-import joptsimple.OptionParser;
-import joptsimple.OptionSet;
-import joptsimple.OptionSpec;
-
-import java.io.*;
+import java.io.DataInputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
 import java.util.Random;
 import java.util.concurrent.atomic.AtomicInteger;
+import joptsimple.ArgumentAcceptingOptionSpec;
+import joptsimple.OptionParser;
+import joptsimple.OptionSet;
+import joptsimple.OptionSpec;
 
 
 /**
@@ -55,11 +68,13 @@ public class ServerTool {
   private PartitionId partitionId;
   private DataNodeId dataNodeId = null;
 
-  public ServerTool()
-      throws Exception {
-    ConnectionPoolConfig connectionPoolConfig = new ConnectionPoolConfig(new VerifiableProperties(new Properties()));
-    SSLConfig sslConfig = new SSLConfig(new VerifiableProperties(new Properties()));
-    connectionPool = new BlockingChannelConnectionPool(connectionPoolConfig, sslConfig, new MetricRegistry());
+  public ServerTool() throws Exception {
+    VerifiableProperties vProps = new VerifiableProperties(new Properties());
+    ConnectionPoolConfig connectionPoolConfig = new ConnectionPoolConfig(vProps);
+    SSLConfig sslConfig = new SSLConfig(vProps);
+    ClusterMapConfig clusterMapConfig = new ClusterMapConfig(vProps);
+    connectionPool =
+        new BlockingChannelConnectionPool(connectionPoolConfig, sslConfig, clusterMapConfig, new MetricRegistry());
     connectionPool.start();
   }
 
@@ -109,8 +124,7 @@ public class ServerTool {
   }
 
   public void walkDirectoryToCreateBlobs(String path, FileWriter writer, String datacenter,
-                                         boolean enableVerboseLogging)
-      throws InterruptedException {
+                                         boolean enableVerboseLogging) throws InterruptedException {
 
     File root = new File(path);
     File[] list = root.listFiles();
@@ -195,8 +209,7 @@ public class ServerTool {
    * @throws Exception
    */
   private boolean writeToAmbryReplica(BlobProperties blobProperties, ByteBuffer userMetaData, InputStream stream,
-                                      BlobId blobId, ReplicaId replicaId, AtomicInteger correlationId, boolean enableVerboseLogging)
-      throws Exception {
+                                      BlobId blobId, ReplicaId replicaId, AtomicInteger correlationId, boolean enableVerboseLogging) throws Exception {
     ArrayList<BlobId> blobIds = new ArrayList<BlobId>();
     blobIds.add(blobId);
     ConnectedChannel blockingChannel = null;
@@ -221,8 +234,9 @@ public class ServerTool {
       } else {
         if (putResponse.getError() != ServerErrorCode.No_Error
             && putResponse.getError() != ServerErrorCode.Blob_Already_Exists) {
-          System.out.println("PutResponse to a replica " + replicaId + " failed with Error code  " +
-              putResponse.getError() + " for blobId " + blobId);
+          System.out.println(
+              "PutResponse to a replica " + replicaId + " failed with Error code  " + putResponse.getError()
+                  + " for blobId " + blobId);
           return false;
         }
         return true;
@@ -265,41 +279,60 @@ public class ServerTool {
     try {
       OptionParser parser = new OptionParser();
       ArgumentAcceptingOptionSpec<String> rootDirectoryOpt =
-          parser.accepts("rootDirectory", "The root folder from which all the files will be migrated").withRequiredArg()
-              .describedAs("root_directory").ofType(String.class);
+          parser.accepts("rootDirectory", "The root folder from which all the files will be migrated")
+              .withRequiredArg()
+              .describedAs("root_directory")
+              .ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> hardwareLayoutOpt =
-          parser.accepts("hardwareLayout", "The path of the hardware layout file").withRequiredArg()
-              .describedAs("hardware_layout").ofType(String.class);
+          parser.accepts("hardwareLayout", "The path of the hardware layout file")
+              .withRequiredArg()
+              .describedAs("hardware_layout")
+              .ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> partitionLayoutOpt =
-          parser.accepts("partitionLayout", "The path of the partition layout file").withRequiredArg()
-              .describedAs("partition_layout").ofType(String.class);
+          parser.accepts("partitionLayout", "The path of the partition layout file")
+              .withRequiredArg()
+              .describedAs("partition_layout")
+              .ofType(String.class);
 
       ArgumentAcceptingOptionSpec<Boolean> verboseLoggingOpt =
-          parser.accepts("enableVerboseLogging", "Enables verbose logging").withOptionalArg()
-              .describedAs("Enable verbose logging").ofType(Boolean.class).defaultsTo(false);
+          parser.accepts("enableVerboseLogging", "Enables verbose logging")
+              .withOptionalArg()
+              .describedAs("Enable verbose logging")
+              .ofType(Boolean.class)
+              .defaultsTo(false);
 
       ArgumentAcceptingOptionSpec<String> partitionOpt =
-          parser.accepts("partition", "The partition to which the put calls to be made against").withRequiredArg()
-              .describedAs("partition").ofType(String.class);
+          parser.accepts("partition", "The partition to which the put calls to be made against")
+              .withRequiredArg()
+              .describedAs("partition")
+              .ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> datacenterOpt =
-          parser.accepts("datacenter", "The datacenter to which the put calls to be made against").withRequiredArg()
-              .describedAs("datacenter").ofType(String.class);
+          parser.accepts("datacenter", "The datacenter to which the put calls to be made against")
+              .withRequiredArg()
+              .describedAs("datacenter")
+              .ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> outFileOpt =
-          parser.accepts("outFile", "The file to which output should be redirected").withRequiredArg()
-              .describedAs("outFile").ofType(String.class);
+          parser.accepts("outFile", "The file to which output should be redirected")
+              .withRequiredArg()
+              .describedAs("outFile")
+              .ofType(String.class);
 
       // Optional arguments for defining a specific node to write to.
       ArgumentAcceptingOptionSpec<String> nodeHostnameOpt =
           parser.accepts("nodeHostname", "The hostname of the node to put to (if specifying single node)")
-              .withOptionalArg().describedAs("nodeHostname").ofType(String.class);
+              .withOptionalArg()
+              .describedAs("nodeHostname")
+              .ofType(String.class);
 
       ArgumentAcceptingOptionSpec<Integer> nodePortOpt =
-          parser.accepts("nodePort", "The port of the node to put to (if specifying single node)").withOptionalArg()
-              .describedAs("nodePort").ofType(Integer.class);
+          parser.accepts("nodePort", "The port of the node to put to (if specifying single node)")
+              .withOptionalArg()
+              .describedAs("nodePort")
+              .ofType(Integer.class);
 
       OptionSet options = parser.parse(args);
 

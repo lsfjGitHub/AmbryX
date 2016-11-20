@@ -16,16 +16,26 @@ package com.github.ambry.rest;
 import com.github.ambry.router.Callback;
 import com.github.ambry.router.FutureResult;
 import io.netty.bootstrap.Bootstrap;
-import io.netty.channel.*;
+import io.netty.channel.ChannelFuture;
+import io.netty.channel.ChannelHandler;
+import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.ChannelInitializer;
+import io.netty.channel.EventLoopGroup;
+import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
-import io.netty.handler.codec.http.*;
+import io.netty.handler.codec.http.HttpClientCodec;
+import io.netty.handler.codec.http.HttpContent;
+import io.netty.handler.codec.http.HttpHeaders;
+import io.netty.handler.codec.http.HttpObject;
+import io.netty.handler.codec.http.HttpRequest;
+import io.netty.handler.codec.http.HttpResponse;
+import io.netty.handler.codec.http.LastHttpContent;
 import io.netty.handler.stream.ChunkedInput;
 import io.netty.handler.stream.ChunkedWriteHandler;
 import io.netty.util.ReferenceCountUtil;
 import io.netty.util.concurrent.GenericFutureListener;
-
 import java.io.Closeable;
 import java.util.LinkedList;
 import java.util.Queue;
@@ -66,14 +76,12 @@ public class NettyClient implements Closeable {
    * @param hostname the host to connect to.
    * @param port the port to connect to.
    */
-  public NettyClient(String hostname, int port)
-      throws InterruptedException {
+  public NettyClient(String hostname, int port) throws InterruptedException {
     this.hostname = hostname;
     this.port = port;
     b.group(group).channel(NioSocketChannel.class).handler(new ChannelInitializer<SocketChannel>() {
       @Override
-      public void initChannel(SocketChannel ch)
-          throws Exception {
+      public void initChannel(SocketChannel ch) throws Exception {
         ch.pipeline().addLast(new HttpClientCodec()).addLast(new ChunkedWriteHandler()).addLast(communicationHandler);
       }
     });
@@ -93,7 +101,7 @@ public class NettyClient implements Closeable {
    * @return a {@link Future} that tracks the arrival of the response for this request.
    */
   public Future<Queue<HttpObject>> sendRequest(HttpRequest request, ChunkedInput<HttpContent> content,
-                                               Callback<Queue<HttpObject>> callback) {
+      Callback<Queue<HttpObject>> callback) {
     this.request = request;
     this.content = content;
     this.callback = callback;
@@ -135,8 +143,7 @@ public class NettyClient implements Closeable {
    * success of the connect.
    * @throws InterruptedException if the connect is interrupted.
    */
-  private void createChannel()
-      throws InterruptedException {
+  private void createChannel() throws InterruptedException {
     channelConnectFuture = b.connect(hostname, port);
     // add a listener to create a new channel if this channel disconnects.
     ChannelFuture channelCloseFuture = channelConnectFuture.channel().closeFuture();
@@ -195,8 +202,7 @@ public class NettyClient implements Closeable {
   private class ChannelCloseListener implements GenericFutureListener<ChannelFuture> {
 
     @Override
-    public void operationComplete(ChannelFuture future)
-        throws InterruptedException {
+    public void operationComplete(ChannelFuture future) throws InterruptedException {
       if (isOpen.get()) {
         createChannel();
       }

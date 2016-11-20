@@ -20,25 +20,37 @@ import com.github.ambry.commons.BlobIdFactory;
 import com.github.ambry.commons.ResponseHandler;
 import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.config.RouterConfig;
-import com.github.ambry.messageformat.*;
+import com.github.ambry.messageformat.BlobAll;
+import com.github.ambry.messageformat.BlobData;
+import com.github.ambry.messageformat.BlobInfo;
+import com.github.ambry.messageformat.BlobType;
+import com.github.ambry.messageformat.CompositeBlobInfo;
+import com.github.ambry.messageformat.MessageFormatException;
+import com.github.ambry.messageformat.MessageFormatFlags;
+import com.github.ambry.messageformat.MessageFormatRecord;
+import com.github.ambry.messageformat.MetadataContentSerDe;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
-import com.github.ambry.protocol.GetOptions;
+import com.github.ambry.protocol.GetOption;
 import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.Time;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
-import java.util.*;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.ListIterator;
+import java.util.Map;
+import java.util.TreeMap;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -112,16 +124,15 @@ class GetBlobOperation extends GetOperation {
    * @throws RouterException if there is an error with any of the parameters, such as an invalid blob id.
    */
   GetBlobOperation(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, ClusterMap clusterMap,
-                   ResponseHandler responseHandler, String blobIdStr, GetBlobOptions options,
-                   FutureResult<GetBlobResult> futureResult, Callback<GetBlobResult> callback,
-                   OperationCompleteCallback operationCompleteCallback, ReadyForPollCallback readyForPollCallback,
-                   BlobIdFactory blobIdFactory, Time time)
-      throws RouterException {
+      ResponseHandler responseHandler, String blobIdStr, GetBlobOptions options,
+      FutureResult<GetBlobResult> futureResult, Callback<GetBlobResult> callback,
+      OperationCompleteCallback operationCompleteCallback, ReadyForPollCallback readyForPollCallback,
+      BlobIdFactory blobIdFactory, Time time) throws RouterException {
     super(routerConfig, routerMetrics, clusterMap, responseHandler, blobIdStr, options, futureResult, callback, time);
     this.operationCompleteCallback = operationCompleteCallback;
     this.readyForPollCallback = readyForPollCallback;
     this.blobIdFactory = blobIdFactory;
-    firstChunk = new FirstGetChunk(blobId);
+    firstChunk = new FirstGetChunk();
   }
 
   /**
@@ -189,8 +200,8 @@ class GetBlobOperation extends GetOperation {
    */
   @Override
   void handleResponse(ResponseInfo responseInfo, GetResponse getResponse) {
-    GetChunk getChunk = correlationIdToGetChunk
-        .remove(((RequestOrResponse) responseInfo.getRequestInfo().getRequest()).getCorrelationId());
+    GetChunk getChunk = correlationIdToGetChunk.remove(
+        ((RequestOrResponse) responseInfo.getRequestInfo().getRequest()).getCorrelationId());
     getChunk.handleResponse(responseInfo, getResponse);
     if (getChunk.isComplete()) {
       onChunkOperationComplete(getChunk);
@@ -318,8 +329,7 @@ class GetBlobOperation extends GetOperation {
     }
 
     @Override
-    public void close()
-        throws IOException {
+    public void close() throws IOException {
       if (isOpen.compareAndSet(true, false)) {
         if (numChunksWrittenOut != numChunksTotal) {
           setOperationException(new RouterException(
@@ -446,13 +456,13 @@ class GetBlobOperation extends GetOperation {
     }
 
     /**
-     * @return the {@link GetOptions} to associate with the {@link GetRequest}s that will be issued by this GetChunk.
+     * @return the {@link GetOption} to associate with the {@link GetRequest}s that will be issued by this GetChunk.
      */
-    GetOptions getGetOptions() {
+    GetOption getGetOption() {
       // Anything other than the first GetChunk should ignore Delete and Expired flags. This is to avoid errors due
       // to the blob getting expired or deleted in the middle of a retrieval - after the metadata chunk was
       // successfully retrieved.
-      return GetOptions.Include_All;
+      return GetOption.Include_All;
     }
 
     /**
@@ -552,7 +562,7 @@ class GetBlobOperation extends GetOperation {
         replicaIterator.remove();
         String hostname = replicaId.getDataNodeId().getHostname();
         Port port = replicaId.getDataNodeId().getPortToConnectTo();
-        GetRequest getRequest = createGetRequest(chunkBlobId, getOperationFlag(), getGetOptions());
+        GetRequest getRequest = createGetRequest(chunkBlobId, getOperationFlag(), getGetOption());
         RouterRequestInfo request = new RouterRequestInfo(hostname, port, getRequest, replicaId);
         int correlationId = getRequest.getCorrelationId();
         correlationIdToGetRequestInfo.put(correlationId, new GetRequestInfo(replicaId, time.milliseconds()));
@@ -590,8 +600,7 @@ class GetBlobOperation extends GetOperation {
      * @throws IOException if there is an IOException while deserializing the body.
      * @throws MessageFormatException if there is a MessageFormatException while deserializing the body.
      */
-    void handleBody(InputStream payload)
-        throws IOException, MessageFormatException {
+    void handleBody(InputStream payload) throws IOException, MessageFormatException {
       if (!successfullyDeserialized) {
         BlobData blobData = MessageFormatRecord.deserializeBlob(payload);
         chunkIndexToBuffer.put(chunkIndex, filterChunkToRange(blobData));
@@ -621,8 +630,8 @@ class GetBlobOperation extends GetOperation {
       }
       long requestLatencyMs = time.milliseconds() - getRequestInfo.startTimeMs;
       routerMetrics.routerRequestLatencyMs.update(requestLatencyMs);
-      routerMetrics.getDataNodeBasedMetrics(getRequestInfo.replicaId.getDataNodeId()).getRequestLatencyMs
-          .update(requestLatencyMs);
+      routerMetrics.getDataNodeBasedMetrics(getRequestInfo.replicaId.getDataNodeId()).getRequestLatencyMs.update(
+          requestLatencyMs);
       if (responseInfo.getError() != null) {
         chunkException = new RouterException("Operation timed out", RouterErrorCode.OperationTimedOut);
         onErrorResponse(getRequestInfo.replicaId);
@@ -797,11 +806,11 @@ class GetBlobOperation extends GetOperation {
    * and whether a chunk is composite or simple can only be determined after the first chunk is fetched.
    */
   private class FirstGetChunk extends GetChunk {
+
     /**
-     * Construct a FirstGetChunk and initialize it with the given {@link BlobId}.
-     * @param blobId the {@link BlobId} to assign to this chunk. This will be the id of the overall blob.
+     * Construct a FirstGetChunk and initialize it with the {@link BlobId} of the overall operation.
      */
-    FirstGetChunk(BlobId blobId) {
+    FirstGetChunk() {
       super(-1, blobId);
     }
 
@@ -817,8 +826,8 @@ class GetBlobOperation extends GetOperation {
     }
 
     @Override
-    GetOptions getGetOptions() {
-      return GetOptions.None;
+    GetOption getGetOption() {
+      return options.getGetOption();
     }
 
     /**
@@ -839,8 +848,7 @@ class GetBlobOperation extends GetOperation {
      * or the only chunk of the blob.
      */
     @Override
-    void handleBody(InputStream payload)
-        throws IOException, MessageFormatException {
+    void handleBody(InputStream payload) throws IOException, MessageFormatException {
       if (!successfullyDeserialized) {
         BlobData blobData;
         if (getOperationFlag() == MessageFormatFlags.Blob) {
@@ -898,8 +906,7 @@ class GetBlobOperation extends GetOperation {
      * @throws IOException
      * @throws MessageFormatException
      */
-    private void handleMetadataBlob(BlobData blobData)
-        throws IOException, MessageFormatException {
+    private void handleMetadataBlob(BlobData blobData) throws IOException, MessageFormatException {
       ByteBuffer serializedMetadataContent = blobData.getStream().getByteBuffer();
       CompositeBlobInfo compositeBlobInfo =
           MetadataContentSerDe.deserializeMetadataContentRecord(serializedMetadataContent, blobIdFactory);

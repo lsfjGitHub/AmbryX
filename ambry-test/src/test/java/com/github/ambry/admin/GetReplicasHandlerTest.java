@@ -18,15 +18,18 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.BlobId;
-import com.github.ambry.rest.*;
+import com.github.ambry.rest.MockRestResponseChannel;
+import com.github.ambry.rest.ResponseStatus;
+import com.github.ambry.rest.RestResponseChannel;
+import com.github.ambry.rest.RestServiceErrorCode;
+import com.github.ambry.rest.RestServiceException;
+import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.ReadableStreamChannel;
-import org.junit.Test;
-
 import java.io.IOException;
 import java.util.List;
+import org.junit.Test;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.fail;
+import static org.junit.Assert.*;
 
 
 /**
@@ -54,8 +57,7 @@ public class GetReplicasHandlerTest {
    * @throws Exception
    */
   @Test
-  public void getReplicasTest()
-      throws Exception {
+  public void getReplicasTest() throws Exception {
     List<PartitionId> partitionIds = CLUSTER_MAP.getWritablePartitionIds();
     for (PartitionId partitionId : partitionIds) {
       String originalReplicaStr = partitionId.getReplicaIds().toString().replace(", ", ",");
@@ -78,8 +80,7 @@ public class GetReplicasHandlerTest {
    * @throws Exception
    */
   @Test
-  public void getReplicasWithBadInputTest()
-      throws Exception {
+  public void getReplicasWithBadInputTest() throws Exception {
     // bad input - invalid blob id.
     try {
       getReplicasHandler.getReplicas("12345", new MockRestResponseChannel());

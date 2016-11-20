@@ -15,18 +15,21 @@ package com.github.ambry.router;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
-import com.github.ambry.config.*;
+import com.github.ambry.config.ClusterMapConfig;
+import com.github.ambry.config.NetworkConfig;
+import com.github.ambry.config.RouterConfig;
+import com.github.ambry.config.SSLConfig;
+import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.network.NetworkClientFactory;
 import com.github.ambry.network.NetworkMetrics;
 import com.github.ambry.network.SSLFactory;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.io.IOException;
 import java.security.GeneralSecurityException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -57,8 +60,7 @@ public class NonBlockingRouterFactory implements RouterFactory {
    * @throws IOException if the SSL configs could not be initialized.
    */
   public NonBlockingRouterFactory(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
-                                  NotificationSystem notificationSystem)
-      throws GeneralSecurityException, IOException {
+      NotificationSystem notificationSystem) throws GeneralSecurityException, IOException {
     if (verifiableProperties != null && clusterMap != null && notificationSystem != null) {
       routerConfig = new RouterConfig(verifiableProperties);
       if (!clusterMap.hasDatacenter(routerConfig.routerDatacenterName)) {
@@ -90,8 +92,7 @@ public class NonBlockingRouterFactory implements RouterFactory {
    * @throws InstantiationException
    */
   @Override
-  public Router getRouter()
-      throws InstantiationException {
+  public Router getRouter() throws InstantiationException {
     try {
       return new NonBlockingRouter(routerConfig, routerMetrics, networkClientFactory, notificationSystem, clusterMap,
           time);

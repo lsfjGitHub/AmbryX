@@ -16,11 +16,14 @@ package com.github.ambry.clustermap;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
-
 import java.io.DataInputStream;
 import java.io.File;
 import java.io.IOException;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
 
 
 /**
@@ -33,6 +36,8 @@ public class MockClusterMap implements ClusterMap {
   private final int numMountPointsPerNode;
   private final HashSet<String> dataCentersInClusterMap = new HashSet<>();
   private boolean partitionsUnavailable = false;
+  private boolean createNewRegistry = true;
+  private MetricRegistry metricRegistry;
 
   /**
    * The default constructor sets up a 9 node cluster with 3 mount points in each, with 3 partitions/replicas per
@@ -40,8 +45,7 @@ public class MockClusterMap implements ClusterMap {
    * is going to be used to start a cluster, use it judiciously to avoid resource consumption issues on the test
    * machine.
    */
-  public MockClusterMap()
-      throws IOException {
+  public MockClusterMap() throws IOException {
     this(false, 9, 3, 3);
   }
 
@@ -127,8 +131,7 @@ public class MockClusterMap implements ClusterMap {
     throw new IllegalArgumentException("No PlainText port found ");
   }
 
-  private MockDataNodeId createDataNode(ArrayList<Port> ports, String datacenter)
-      throws IOException {
+  private MockDataNodeId createDataNode(ArrayList<Port> ports, String datacenter) throws IOException {
     File f = null;
     int port = getPlainTextPort(ports);
     try {
@@ -149,8 +152,7 @@ public class MockClusterMap implements ClusterMap {
   }
 
   @Override
-  public PartitionId getPartitionIdFromStream(DataInputStream stream)
-      throws IOException {
+  public PartitionId getPartitionIdFromStream(DataInputStream stream) throws IOException {
     short version = stream.readShort();
     long id = stream.readLong();
     return partitions.get(id);
@@ -209,11 +211,21 @@ public class MockClusterMap implements ClusterMap {
   @Override
   public MetricRegistry getMetricRegistry() {
     // Each server that calls this mocked interface needs its own metric registry.
-    return new MetricRegistry();
+    if (createNewRegistry) {
+      metricRegistry = new MetricRegistry();
+    }
+    return metricRegistry;
   }
 
-  public void cleanup()
-      throws IOException {
+  /**
+   * Create a {@link MetricRegistry} and ensure that this is the one that is returned by {@link #getMetricRegistry()}
+   */
+  public void createAndSetPermanentMetricRegistry() {
+    metricRegistry = new MetricRegistry();
+    createNewRegistry = false;
+  }
+
+  public void cleanup() throws IOException {
     for (PartitionId partitionId : partitions.values()) {
       MockPartitionId mockPartition = (MockPartitionId) partitionId;
       mockPartition.cleanUp();
@@ -228,8 +240,7 @@ public class MockClusterMap implements ClusterMap {
     }
   }
 
-  private static boolean deleteFileOrDirectory(File f)
-      throws IOException {
+  private static boolean deleteFileOrDirectory(File f) throws IOException {
     if (f.exists()) {
       if (f.isDirectory()) {
         File[] children = f.listFiles();

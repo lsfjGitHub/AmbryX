@@ -14,8 +14,12 @@
 package com.github.ambry.rest;
 
 import com.github.ambry.router.ByteRange;
-import io.netty.handler.codec.http.*;
-
+import io.netty.handler.codec.http.DefaultHttpRequest;
+import io.netty.handler.codec.http.HttpContent;
+import io.netty.handler.codec.http.HttpHeaders;
+import io.netty.handler.codec.http.HttpMethod;
+import io.netty.handler.codec.http.HttpRequest;
+import io.netty.handler.codec.http.HttpVersion;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -47,8 +51,7 @@ public class RestTestUtils {
    * @return content that is inside {@code httpContent} as a human readable string.
    * @throws IOException
    */
-  public static String getContentString(HttpContent httpContent)
-      throws IOException {
+  public static String getContentString(HttpContent httpContent) throws IOException {
     ByteArrayOutputStream out = new ByteArrayOutputStream();
     httpContent.content().readBytes(out, httpContent.content().readableBytes());
     return out.toString(StandardCharsets.UTF_8.name());
@@ -58,7 +61,9 @@ public class RestTestUtils {
    * Gets a byte array of length {@code size} with random bytes.
    * @param size the required length of the random byte array.
    * @return a byte array of length {@code size} with random bytes.
+   * @deprecated use {@link com.github.ambry.utils.TestUtils#getRandomBytes(int)} instead.
    */
+  @Deprecated
   public static byte[] getRandomBytes(int size) {
     byte[] bytes = new byte[size];
     new Random().nextBytes(bytes);
@@ -68,7 +73,7 @@ public class RestTestUtils {
   /**
    * Build the range header value from a {@link ByteRange}
    * @param range the {@link ByteRange} representing the range
-   * @return
+   * @return the range header value corresponding to {@code range}.
    */
   public static String getRangeHeaderString(ByteRange range) {
     switch (range.getType()) {

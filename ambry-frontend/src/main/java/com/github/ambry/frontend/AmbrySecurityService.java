@@ -16,14 +16,21 @@ package com.github.ambry.frontend;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
-import com.github.ambry.rest.*;
+import com.github.ambry.protocol.GetOption;
+import com.github.ambry.rest.ResponseStatus;
+import com.github.ambry.rest.RestMethod;
+import com.github.ambry.rest.RestRequest;
+import com.github.ambry.rest.RestResponseChannel;
+import com.github.ambry.rest.RestServiceErrorCode;
+import com.github.ambry.rest.RestServiceException;
+import com.github.ambry.rest.RestUtils;
+import com.github.ambry.rest.SecurityService;
 import com.github.ambry.router.Callback;
 import com.github.ambry.router.FutureResult;
 import com.github.ambry.router.GetBlobOptions;
 import com.github.ambry.utils.Pair;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
-
 import java.util.Date;
 import java.util.GregorianCalendar;
 import java.util.concurrent.Future;
@@ -84,7 +91,7 @@ class AmbrySecurityService implements SecurityService {
 
   @Override
   public Future<Void> processResponse(RestRequest restRequest, RestResponseChannel responseChannel, BlobInfo blobInfo,
-                                      Callback<Void> callback) {
+      Callback<Void> callback) {
     Exception exception = null;
     frontendMetrics.securityServiceProcessResponseRate.mark();
     long startTimeMs = System.currentTimeMillis();
@@ -101,7 +108,7 @@ class AmbrySecurityService implements SecurityService {
         RestMethod restMethod = restRequest.getRestMethod();
         switch (restMethod) {
           case HEAD:
-            options = RestUtils.buildGetBlobOptions(restRequest.getArgs(), null);
+            options = RestUtils.buildGetBlobOptions(restRequest.getArgs(), null, GetOption.None);
             responseChannel.setStatus(options.getRange() == null ? ResponseStatus.Ok : ResponseStatus.PartialContent);
             responseChannel.setHeader(RestUtils.Headers.LAST_MODIFIED,
                 new Date(blobInfo.getBlobProperties().getCreationTimeInMs()));
@@ -118,7 +125,7 @@ class AmbrySecurityService implements SecurityService {
                 responseChannel.setStatus(ResponseStatus.NotModified);
                 responseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, 0);
               } else {
-                options = RestUtils.buildGetBlobOptions(restRequest.getArgs(), null);
+                options = RestUtils.buildGetBlobOptions(restRequest.getArgs(), null, GetOption.None);
                 if (options.getRange() != null) {
                   responseChannel.setStatus(ResponseStatus.PartialContent);
                 }
@@ -181,8 +188,7 @@ class AmbrySecurityService implements SecurityService {
    * @throws RestServiceException if there was any problem setting the headers.
    */
   private void setHeadResponseHeaders(BlobInfo blobInfo, GetBlobOptions options,
-                                      RestResponseChannel restResponseChannel)
-      throws RestServiceException {
+      RestResponseChannel restResponseChannel) throws RestServiceException {
     BlobProperties blobProperties = blobInfo.getBlobProperties();
     if (blobProperties.getContentType() != null) {
       restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, blobProperties.getContentType());
@@ -206,8 +212,7 @@ class AmbrySecurityService implements SecurityService {
    * @throws RestServiceException if there was any problem setting the headers.
    */
   private void setGetBlobResponseHeaders(BlobInfo blobInfo, GetBlobOptions options,
-                                         RestResponseChannel restResponseChannel)
-      throws RestServiceException {
+      RestResponseChannel restResponseChannel) throws RestServiceException {
     BlobProperties blobProperties = blobInfo.getBlobProperties();
     restResponseChannel.setHeader(RestUtils.Headers.BLOB_SIZE, blobProperties.getBlobSize());
     restResponseChannel.setHeader(RestUtils.Headers.ACCEPT_RANGES, RestUtils.BYTE_RANGE_UNITS);
@@ -234,8 +239,8 @@ class AmbrySecurityService implements SecurityService {
     } else {
       restResponseChannel.setHeader(RestUtils.Headers.EXPIRES,
           new Date(System.currentTimeMillis() + frontendConfig.frontendCacheValiditySeconds * Time.MsPerSec));
-      restResponseChannel
-          .setHeader(RestUtils.Headers.CACHE_CONTROL, "max-age=" + frontendConfig.frontendCacheValiditySeconds);
+      restResponseChannel.setHeader(RestUtils.Headers.CACHE_CONTROL,
+          "max-age=" + frontendConfig.frontendCacheValiditySeconds);
     }
   }
 

@@ -23,10 +23,9 @@ import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.handler.logging.LogLevel;
 import io.netty.handler.logging.LoggingHandler;
+import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.util.concurrent.TimeUnit;
 
 
 /**
@@ -58,7 +57,7 @@ public class NettyServer implements NioServer {
    * @param channelInitializer A {@link ChannelInitializer} that is used to initialize new channels.
    */
   public NettyServer(NettyConfig nettyConfig, NettyMetrics nettyMetrics,
-                     ChannelInitializer<SocketChannel> channelInitializer) {
+      ChannelInitializer<SocketChannel> channelInitializer) {
     this.nettyConfig = nettyConfig;
     this.nettyMetrics = nettyMetrics;
     this.channelInitializer = channelInitializer;
@@ -67,8 +66,7 @@ public class NettyServer implements NioServer {
   }
 
   @Override
-  public void start()
-      throws InstantiationException {
+  public void start() throws InstantiationException {
     long startupBeginTime = System.currentTimeMillis();
     try {
       logger.trace("Starting NettyServer deployment");
@@ -77,9 +75,11 @@ public class NettyServer implements NioServer {
       ServerBootstrap b = new ServerBootstrap();
       // Netty creates a new instance of every class in the pipeline for every connection
       // i.e. if there are a 1000 active connections there will be a 1000 NettyMessageProcessor instances.
-      b.group(bossGroup, workerGroup).channel(NioServerSocketChannel.class)
+      b.group(bossGroup, workerGroup)
+          .channel(NioServerSocketChannel.class)
           .option(ChannelOption.SO_BACKLOG, nettyConfig.nettyServerSoBacklog)
-          .handler(new LoggingHandler(LogLevel.DEBUG)).childHandler(channelInitializer);
+          .handler(new LoggingHandler(LogLevel.DEBUG))
+          .childHandler(channelInitializer);
       b.bind(nettyConfig.nettyServerPort).sync();
       logger.info("NettyServer now listening on port {}", nettyConfig.nettyServerPort);
     } catch (InterruptedException e) {

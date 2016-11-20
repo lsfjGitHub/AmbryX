@@ -14,7 +14,12 @@
     <dependencies>
         <dependency>
             <groupId>com.github.ambry</groupId>
-            <artifactId>ambry-metrics</artifactId>
+            <artifactId>ambry-utils</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.github.ambry</groupId>
+            <artifactId>ambry-api</artifactId>
             <version>${project.version}</version>
         </dependency>
     </dependencies>

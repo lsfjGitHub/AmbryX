@@ -13,13 +13,12 @@
  */
 package com.github.ambry.tools.util;
 
+import java.util.ArrayList;
+import java.util.Properties;
 import joptsimple.ArgumentAcceptingOptionSpec;
 import joptsimple.OptionParser;
 import joptsimple.OptionSet;
 import joptsimple.OptionSpec;
-
-import java.util.ArrayList;
-import java.util.Properties;
 
 
 /**
@@ -27,12 +26,11 @@ import java.util.Properties;
  */
 public final class ToolUtils {
   public static void validateSSLOptions(OptionSet options, OptionParser parser,
-                                        ArgumentAcceptingOptionSpec<String> sslEnabledDatacentersOpt,
-                                        ArgumentAcceptingOptionSpec<String> sslKeystorePathOpt, ArgumentAcceptingOptionSpec<String> sslKeystoreTypeOpt,
-                                        ArgumentAcceptingOptionSpec<String> sslTruststorePathOpt,
-                                        ArgumentAcceptingOptionSpec<String> sslKeystorePasswordOpt, ArgumentAcceptingOptionSpec<String> sslKeyPasswordOpt,
-                                        ArgumentAcceptingOptionSpec<String> sslTruststorePasswordOpt)
-      throws Exception {
+      ArgumentAcceptingOptionSpec<String> sslEnabledDatacentersOpt,
+      ArgumentAcceptingOptionSpec<String> sslKeystorePathOpt, ArgumentAcceptingOptionSpec<String> sslKeystoreTypeOpt,
+      ArgumentAcceptingOptionSpec<String> sslTruststorePathOpt,
+      ArgumentAcceptingOptionSpec<String> sslKeystorePasswordOpt, ArgumentAcceptingOptionSpec<String> sslKeyPasswordOpt,
+      ArgumentAcceptingOptionSpec<String> sslTruststorePasswordOpt) throws Exception {
     String sslEnabledDatacenters = options.valueOf(sslEnabledDatacentersOpt);
     if (sslEnabledDatacenters.length() != 0) {
       ArrayList<OptionSpec<?>> listOpt = new ArrayList<OptionSpec<?>>();
@@ -53,8 +51,8 @@ public final class ToolUtils {
   }
 
   public static Properties createSSLProperties(String sslEnabledDatacenters, String sslKeystorePath,
-                                               String sslKeyStoreType, String sslKeystorePassword, String keyPassword, String sslTruststorePath,
-                                               String sslTruststorePassword, String sslCipherSuites) {
+      String sslKeyStoreType, String sslKeystorePassword, String keyPassword, String sslTruststorePath,
+      String sslTruststorePassword, String sslCipherSuites) {
     Properties props = new Properties();
     props.put("ssl.context.protocol", "TLS");
     props.put("ssl.context.provider", "SunJSSE");
@@ -71,7 +69,7 @@ public final class ToolUtils {
     props.put("ssl.truststore.path", sslTruststorePath);
     props.put("ssl.truststore.password", sslTruststorePassword);
     props.put("ssl.cipher.suites", sslCipherSuites);
-    props.put("ssl.enabled.datacenters", sslEnabledDatacenters);
+    props.put("clustermap.ssl.enabled.datacenters", sslEnabledDatacenters);
     return props;
   }
 

@@ -11,7 +11,6 @@
     <modules>
         <module>ambry-utils</module>
         <module>ambry-api</module>
-        <module>ambry-metrics</module>
         <module>ambry-clustermap</module>
         <module>ambry-messageformat</module>
         <module>ambry-network</module>

@@ -16,10 +16,9 @@ package com.github.ambry.rest;
 import io.netty.channel.ChannelHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
+import java.util.concurrent.atomic.AtomicLong;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.util.concurrent.atomic.AtomicLong;
 
 
 /**
@@ -40,8 +39,7 @@ public class ConnectionStatsHandler extends ChannelInboundHandlerAdapter {
   }
 
   @Override
-  public void channelActive(ChannelHandlerContext ctx)
-      throws Exception {
+  public void channelActive(ChannelHandlerContext ctx) throws Exception {
     logger.trace("Channel Active " + ctx.channel().remoteAddress());
     metrics.connectionsConnectedCount.inc();
     openConnections.incrementAndGet();
@@ -49,8 +47,7 @@ public class ConnectionStatsHandler extends ChannelInboundHandlerAdapter {
   }
 
   @Override
-  public void channelInactive(ChannelHandlerContext ctx)
-      throws Exception {
+  public void channelInactive(ChannelHandlerContext ctx) throws Exception {
     logger.trace("Channel Inactive " + ctx.channel().remoteAddress());
     metrics.connectionsDisconnectedCount.inc();
     openConnections.decrementAndGet();

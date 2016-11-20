@@ -13,7 +13,6 @@
  */
 package com.github.ambry.network;
 
-import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
 import java.io.EOFException;
 import java.io.File;
@@ -76,7 +75,7 @@ public class TestSSLUtils {
    * @param days how many days from now the Certificate is valid for
    * @param algorithm the signing algorithm, eg "SHA1withRSA"
    * @return the self-signed certificate
-   * @throws CertificateException thrown if a security error or an IO error ocurred.
+   * @throws java.security.cert.CertificateException thrown if a security error or an IO error ocurred.
    */
   public static X509Certificate generateCertificate(String dn, KeyPair pair, int days, String algorithm)
       throws CertificateException {
@@ -102,15 +101,13 @@ public class TestSSLUtils {
     }
   }
 
-  public static KeyPair generateKeyPair(String algorithm)
-      throws NoSuchAlgorithmException {
+  public static KeyPair generateKeyPair(String algorithm) throws NoSuchAlgorithmException {
     KeyPairGenerator keyGen = KeyPairGenerator.getInstance(algorithm);
     keyGen.initialize(1024);
     return keyGen.genKeyPair();
   }
 
-  private static KeyStore createEmptyKeyStore()
-      throws GeneralSecurityException, IOException {
+  private static KeyStore createEmptyKeyStore() throws GeneralSecurityException, IOException {
     KeyStore ks = KeyStore.getInstance("JKS");
     ks.load(null, null); // initialize
     return ks;
@@ -139,8 +136,7 @@ public class TestSSLUtils {
    * @throws IOException if there is an I/O error saving the file
    */
   public static void createKeyStore(String filename, String password, String keyPassword, String alias, Key privateKey,
-      Certificate cert)
-      throws GeneralSecurityException, IOException {
+      Certificate cert) throws GeneralSecurityException, IOException {
     KeyStore ks = createEmptyKeyStore();
     ks.setKeyEntry(alias, privateKey, keyPassword.toCharArray(), new Certificate[]{cert});
     saveKeyStore(ks, filename, password);
@@ -163,8 +159,7 @@ public class TestSSLUtils {
   }
 
   public static void addSSLProperties(Properties props, String sslEnabledDatacenters, SSLFactory.Mode mode,
-      File trustStoreFile, String certAlias)
-      throws IOException, GeneralSecurityException {
+      File trustStoreFile, String certAlias) throws IOException, GeneralSecurityException {
     Map<String, X509Certificate> certs = new HashMap<String, X509Certificate>();
     File keyStoreFile;
     String password;
@@ -202,27 +197,26 @@ public class TestSSLUtils {
     props.put("ssl.truststore.path", trustStoreFile.getPath());
     props.put("ssl.truststore.password", TRUSTSTORE_PASSWORD);
     props.put("ssl.cipher.suites", SSL_CIPHER_SUITES);
-    props.put("ssl.enabled.datacenters", sslEnabledDatacenters);
+    props.put("clustermap.ssl.enabled.datacenters", sslEnabledDatacenters);
   }
 
   /**
-   * Creates SSLConfig based on the values passed and few other pre-populated values
+   * Creates VerifiableProperties with SSL related configs based on the values passed and few other
+   * pre-populated values
    * @param sslEnabledDatacenters Comma separated list of datacenters against which ssl connections should be
    *                              established
    * @param mode Represents if the caller is a client or server
    * @param trustStoreFile File path of the truststore file
-   * @param certAlias alais used for the certificate
-   * @return {@SSLConfig} with all the required values populated
+   * @param certAlias alias used for the certificate
+   * @return {@link VerifiableProperties} with all the required values populated
    * @throws IOException
    * @throws GeneralSecurityException
    */
-  public static SSLConfig createSSLConfig(String sslEnabledDatacenters, SSLFactory.Mode mode, File trustStoreFile,
-      String certAlias)
-      throws IOException, GeneralSecurityException {
+  public static VerifiableProperties createSslProps(String sslEnabledDatacenters, SSLFactory.Mode mode,
+      File trustStoreFile, String certAlias) throws IOException, GeneralSecurityException {
     Properties props = new Properties();
     addSSLProperties(props, sslEnabledDatacenters, mode, trustStoreFile, certAlias);
-    SSLConfig sslConfig = new SSLConfig(new VerifiableProperties(props));
-    return sslConfig;
+    return new VerifiableProperties(props);
   }
 
   public static void verifySSLConfig(SSLContext sslContext, SSLEngine sslEngine, boolean isClient) {

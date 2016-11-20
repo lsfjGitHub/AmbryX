@@ -17,9 +17,8 @@ import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.router.InMemoryRouter;
 import com.github.ambry.router.Router;
-import org.junit.Test;
-
 import java.util.Properties;
+import org.junit.Test;
 
 import static org.junit.Assert.*;
 
@@ -36,8 +35,7 @@ public class AsyncRequestResponseHandlerFactoryTest {
    * @throws InstantiationException
    */
   @Test
-  public void getAsyncRequestResponseHandlerTest()
-      throws InstantiationException {
+  public void getAsyncRequestResponseHandlerTest() throws InstantiationException {
     Properties properties = new Properties();
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
     Router router = new InMemoryRouter(verifiableProperties);

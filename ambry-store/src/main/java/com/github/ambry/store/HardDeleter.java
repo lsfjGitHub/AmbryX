@@ -19,10 +19,13 @@ import com.github.ambry.utils.CrcInputStream;
 import com.github.ambry.utils.CrcOutputStream;
 import com.github.ambry.utils.Throttler;
 import com.github.ambry.utils.Time;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import java.io.*;
+import java.io.ByteArrayOutputStream;
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
 import java.nio.channels.ReadableByteChannel;
 import java.util.ArrayList;
 import java.util.EnumSet;
@@ -30,6 +33,8 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -88,7 +93,7 @@ public class HardDeleter implements Runnable {
   boolean isCaughtUp = false;
 
   HardDeleter(StoreConfig config, StoreMetrics metrics, String dataDir, Log log, PersistentIndex index,
-              MessageStoreHardDelete hardDelete, StoreKeyFactory factory, Time time) {
+      MessageStoreHardDelete hardDelete, StoreKeyFactory factory, Time time) {
     this.metrics = metrics;
     this.dataDir = dataDir;
     this.log = log;

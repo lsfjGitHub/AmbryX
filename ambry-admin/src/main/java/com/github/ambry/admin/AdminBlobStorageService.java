@@ -18,15 +18,33 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.config.AdminConfig;
 import com.github.ambry.messageformat.BlobInfo;
-import com.github.ambry.rest.*;
-import com.github.ambry.router.*;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
+import com.github.ambry.protocol.GetOption;
+import com.github.ambry.rest.BlobStorageService;
+import com.github.ambry.rest.IdConverter;
+import com.github.ambry.rest.IdConverterFactory;
+import com.github.ambry.rest.ResponseStatus;
+import com.github.ambry.rest.RestMethod;
+import com.github.ambry.rest.RestRequest;
+import com.github.ambry.rest.RestRequestMetrics;
+import com.github.ambry.rest.RestResponseChannel;
+import com.github.ambry.rest.RestResponseHandler;
+import com.github.ambry.rest.RestServiceErrorCode;
+import com.github.ambry.rest.RestServiceException;
+import com.github.ambry.rest.RestUtils;
+import com.github.ambry.rest.SecurityService;
+import com.github.ambry.rest.SecurityServiceFactory;
+import com.github.ambry.router.Callback;
+import com.github.ambry.router.GetBlobOptions;
+import com.github.ambry.router.GetBlobResult;
+import com.github.ambry.router.ReadableStreamChannel;
+import com.github.ambry.router.Router;
+import com.github.ambry.router.RouterException;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.GregorianCalendar;
 import java.util.Map;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -83,8 +101,7 @@ class AdminBlobStorageService implements BlobStorageService {
   }
 
   @Override
-  public void start()
-      throws InstantiationException {
+  public void start() throws InstantiationException {
     long startupBeginTime = System.currentTimeMillis();
     idConverter = idConverterFactory.getIdConverter();
     securityService = securityServiceFactory.getSecurityService();
@@ -270,8 +287,7 @@ class AdminBlobStorageService implements BlobStorageService {
    * Checks if {@link AdminBlobStorageService} is available to serve requests.
    * @throws RestServiceException if {@link AdminBlobStorageService} is not available to serve requests.
    */
-  private void checkAvailable()
-      throws RestServiceException {
+  private void checkAvailable() throws RestServiceException {
     if (!isUp) {
       throw new RestServiceException("AdminBlobStorageService unavailable", RestServiceErrorCode.ServiceUnavailable);
     }
@@ -336,12 +352,13 @@ class AdminBlobStorageService implements BlobStorageService {
           switch (restMethod) {
             case GET:
               RestUtils.SubResource subresource = RestUtils.getBlobSubResource(restRequest);
-              if (subresource == null || subresource.equals(RestUtils.SubResource.BlobInfo) || subresource
-                  .equals(RestUtils.SubResource.UserMetadata)) {
+              GetOption getOption = RestUtils.getGetOption(restRequest);
+              if (subresource == null || subresource.equals(RestUtils.SubResource.BlobInfo) || subresource.equals(
+                  RestUtils.SubResource.UserMetadata)) {
                 getCallback.markStartTime();
                 GetBlobOptions.OperationType getOperationType =
                     subresource != null ? GetBlobOptions.OperationType.BlobInfo : GetBlobOptions.OperationType.All;
-                router.getBlob(result, new GetBlobOptions(getOperationType, null), getCallback);
+                router.getBlob(result, new GetBlobOptions(getOperationType, getOption, null), getCallback);
               } else {
                 switch (subresource) {
                   case Replicas:
@@ -351,8 +368,10 @@ class AdminBlobStorageService implements BlobStorageService {
               }
               break;
             case HEAD:
+              getOption = RestUtils.getGetOption(restRequest);
               headCallback.markStartTime();
-              router.getBlob(result, new GetBlobOptions(GetBlobOptions.OperationType.BlobInfo, null), headCallback);
+              router.getBlob(result, new GetBlobOptions(GetBlobOptions.OperationType.BlobInfo, getOption, null),
+                  headCallback);
               break;
             case DELETE:
               deleteCallback.markStartTime();
@@ -416,7 +435,7 @@ class AdminBlobStorageService implements BlobStorageService {
     }
 
     private SecurityProcessRequestCallback(RestRequest restRequest, RestResponseChannel restResponseChannel,
-                                           String operationType, Histogram operationTimeTracker, Histogram callbackProcessingTimeTracker) {
+        String operationType, Histogram operationTimeTracker, Histogram callbackProcessingTimeTracker) {
       this.restRequest = restRequest;
       this.restResponseChannel = restResponseChannel;
       receivedId = RestUtils.getOperationOrBlobIdFromUri(restRequest, RestUtils.getBlobSubResource(restRequest),
@@ -471,7 +490,7 @@ class AdminBlobStorageService implements BlobStorageService {
      * @param callbackProcessingTimeTracker the {@link Histogram} of the time taken by the callback of the operation.
      */
     CallbackTracker(RestRequest restRequest, String operationType, Histogram operationTimeTracker,
-                    Histogram callbackProcessingTimeTracker) {
+        Histogram callbackProcessingTimeTracker) {
       this.operationType = operationType;
       this.operationTimeTracker = operationTimeTracker;
       this.callbackProcessingTimeTracker = callbackProcessingTimeTracker;
@@ -552,8 +571,8 @@ class AdminBlobStorageService implements BlobStorageService {
               new CallbackTracker(restRequest, OPERATION_TYPE_GET_RESPONSE_SECURITY,
                   adminMetrics.getSecurityResponseTimeInMs, adminMetrics.getSecurityResponseCallbackProcessingTimeInMs);
           securityCallbackTracker.markOperationStart();
-          securityService
-              .processResponse(restRequest, restResponseChannel, routerResult.getBlobInfo(), new Callback<Void>() {
+          securityService.processResponse(restRequest, restResponseChannel, routerResult.getBlobInfo(),
+              new Callback<Void>() {
                 @Override
                 public void onCompletion(Void securityResult, Exception securityException) {
                   securityCallbackTracker.markOperationEnd();
@@ -566,8 +585,8 @@ class AdminBlobStorageService implements BlobStorageService {
                         Map<String, String> userMetadata = RestUtils.buildUserMetadata(blobInfo.getUserMetadata());
                         if (userMetadata == null) {
                           restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, "application/octet-stream");
-                          restResponseChannel
-                              .setHeader(RestUtils.Headers.CONTENT_LENGTH, blobInfo.getUserMetadata().length);
+                          restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH,
+                              blobInfo.getUserMetadata().length);
                           response = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(blobInfo.getUserMetadata()));
                         } else {
                           setUserMetadataHeaders(userMetadata, restResponseChannel);
@@ -722,8 +741,8 @@ class AdminBlobStorageService implements BlobStorageService {
                   adminMetrics.headSecurityResponseTimeInMs,
                   adminMetrics.headSecurityResponseCallbackProcessingTimeInMs);
           securityCallbackTracker.markOperationStart();
-          securityService
-              .processResponse(restRequest, restResponseChannel, routerResult.getBlobInfo(), new Callback<Void>() {
+          securityService.processResponse(restRequest, restResponseChannel, routerResult.getBlobInfo(),
+              new Callback<Void>() {
                 @Override
                 public void onCompletion(Void securityResult, Exception securityException) {
                   callbackTracker.markOperationEnd();

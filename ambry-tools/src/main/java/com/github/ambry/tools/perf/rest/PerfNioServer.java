@@ -14,14 +14,19 @@
 package com.github.ambry.tools.perf.rest;
 
 import com.codahale.metrics.Snapshot;
-import com.github.ambry.rest.*;
+import com.github.ambry.rest.NioServer;
+import com.github.ambry.rest.ResponseStatus;
+import com.github.ambry.rest.RestMethod;
+import com.github.ambry.rest.RestRequest;
+import com.github.ambry.rest.RestRequestHandler;
+import com.github.ambry.rest.RestRequestMetricsTracker;
+import com.github.ambry.rest.RestResponseChannel;
+import com.github.ambry.rest.RestServiceException;
+import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.AsyncWritableChannel;
 import com.github.ambry.router.Callback;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.utils.Time;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
@@ -34,6 +39,8 @@ import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -53,15 +60,14 @@ class PerfNioServer implements NioServer {
    * @param restRequestHandler the instance of {@link RestRequestHandler} to use to handle requests.
    */
   protected PerfNioServer(PerfConfig perfConfig, PerfNioServerMetrics perfNioServerMetrics,
-                          RestRequestHandler restRequestHandler) {
+      RestRequestHandler restRequestHandler) {
     loadCreator = new LoadCreator(perfConfig, perfNioServerMetrics, restRequestHandler);
     loadCreatorThread = new Thread(loadCreator);
     logger.trace("Instantiated PerfNioServer");
   }
 
   @Override
-  public void start()
-      throws InstantiationException {
+  public void start() throws InstantiationException {
     logger.info("Starting PerfNioServer");
     loadCreatorThread.start();
     logger.info("Started PerfNioServer");
@@ -103,7 +109,7 @@ class PerfNioServer implements NioServer {
      * @param restRequestHandler the instance of {@link RestRequestHandler} to use to handle requests.
      */
     protected LoadCreator(PerfConfig perfConfig, PerfNioServerMetrics perfNioServerMetrics,
-                          RestRequestHandler restRequestHandler) {
+        RestRequestHandler restRequestHandler) {
       this.perfConfig = perfConfig;
       this.perfNioServerMetrics = perfNioServerMetrics;
       this.restRequestHandler = restRequestHandler;
@@ -132,8 +138,8 @@ class PerfNioServer implements NioServer {
           RestRequest restRequest =
               new PerfRestRequest(perfConfig.perfRequestRestMethod, usermetadata, chunk, perfConfig.perfBlobSize);
           restRequest.getMetricsTracker().nioMetricsTracker.markRequestReceived();
-          restRequestHandler
-              .handleRequest(restRequest, new NoOpRestResponseChannel(restRequest, perfNioServerMetrics, callback));
+          restRequestHandler.handleRequest(restRequest,
+              new NoOpRestResponseChannel(restRequest, perfNioServerMetrics, callback));
         } catch (Exception e) {
           callback.onCompletion(null, e);
         }
@@ -158,8 +164,7 @@ class PerfNioServer implements NioServer {
      * @return {@code true} if shutdown succeeded within the {@code timeout}. {@code false} otherwise.
      * @throws InterruptedException if the wait for shutdown is interrupted.
      */
-    protected boolean shutdown(long timeout, TimeUnit timeUnit)
-        throws InterruptedException {
+    protected boolean shutdown(long timeout, TimeUnit timeUnit) throws InterruptedException {
       logger.debug("Shutting down LoadCreator");
       running = false;
       return shutdownLatch.await(timeout, timeUnit);
@@ -260,8 +265,7 @@ class PerfNioServer implements NioServer {
     }
 
     @Override
-    public void close()
-        throws IOException {
+    public void close() throws IOException {
       readableStreamChannel.close();
       restRequestMetricsTracker.nioMetricsTracker.markRequestCompleted();
       restRequestMetricsTracker.recordMetrics();
@@ -357,8 +361,7 @@ class PerfNioServer implements NioServer {
     }
 
     @Override
-    public void close()
-        throws IOException {
+    public void close() throws IOException {
       onResponseComplete(new ClosedChannelException());
     }
 
@@ -386,8 +389,7 @@ class PerfNioServer implements NioServer {
     }
 
     @Override
-    public void setStatus(ResponseStatus status)
-        throws RestServiceException {
+    public void setStatus(ResponseStatus status) throws RestServiceException {
       responseStatus = status;
     }
 
@@ -397,8 +399,7 @@ class PerfNioServer implements NioServer {
     }
 
     @Override
-    public void setHeader(String headerName, Object headerValue)
-        throws RestServiceException {
+    public void setHeader(String headerName, Object headerValue) throws RestServiceException {
       headers.put(headerName, headerValue);
     }
 

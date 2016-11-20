@@ -15,25 +15,64 @@ package com.github.ambry.server;
 
 import com.codahale.metrics.Histogram;
 import com.codahale.metrics.MetricRegistry;
-import com.github.ambry.clustermap.*;
+import com.github.ambry.clustermap.ClusterMap;
+import com.github.ambry.clustermap.DataNodeId;
+import com.github.ambry.clustermap.HardwareState;
+import com.github.ambry.clustermap.PartitionId;
+import com.github.ambry.clustermap.PartitionState;
+import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.ServerErrorCode;
-import com.github.ambry.messageformat.*;
-import com.github.ambry.network.*;
+import com.github.ambry.messageformat.DeleteMessageFormatInputStream;
+import com.github.ambry.messageformat.MessageFormatErrorCodes;
+import com.github.ambry.messageformat.MessageFormatException;
+import com.github.ambry.messageformat.MessageFormatFlags;
+import com.github.ambry.messageformat.MessageFormatInputStream;
+import com.github.ambry.messageformat.MessageFormatMetrics;
+import com.github.ambry.messageformat.MessageFormatSend;
+import com.github.ambry.messageformat.MessageFormatWriteSet;
+import com.github.ambry.messageformat.PutMessageFormatInputStream;
+import com.github.ambry.network.CompositeSend;
+import com.github.ambry.network.Request;
+import com.github.ambry.network.RequestResponseChannel;
+import com.github.ambry.network.Send;
+import com.github.ambry.network.ServerNetworkResponseMetrics;
 import com.github.ambry.notification.BlobReplicaSourceType;
 import com.github.ambry.notification.NotificationSystem;
-import com.github.ambry.protocol.*;
+import com.github.ambry.protocol.DeleteRequest;
+import com.github.ambry.protocol.DeleteResponse;
+import com.github.ambry.protocol.GetOption;
+import com.github.ambry.protocol.GetRequest;
+import com.github.ambry.protocol.GetResponse;
+import com.github.ambry.protocol.PartitionRequestInfo;
+import com.github.ambry.protocol.PartitionResponseInfo;
+import com.github.ambry.protocol.PutRequest;
+import com.github.ambry.protocol.PutResponse;
+import com.github.ambry.protocol.ReplicaMetadataRequest;
+import com.github.ambry.protocol.ReplicaMetadataRequestInfo;
+import com.github.ambry.protocol.ReplicaMetadataResponse;
+import com.github.ambry.protocol.ReplicaMetadataResponseInfo;
+import com.github.ambry.protocol.RequestOrResponseType;
 import com.github.ambry.replication.ReplicationManager;
-import com.github.ambry.store.*;
+import com.github.ambry.store.FindInfo;
+import com.github.ambry.store.FindToken;
+import com.github.ambry.store.FindTokenFactory;
+import com.github.ambry.store.MessageInfo;
+import com.github.ambry.store.StorageManager;
+import com.github.ambry.store.Store;
+import com.github.ambry.store.StoreErrorCodes;
+import com.github.ambry.store.StoreException;
+import com.github.ambry.store.StoreGetOptions;
+import com.github.ambry.store.StoreInfo;
+import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Utils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -43,7 +82,7 @@ import java.util.List;
 
 public class AmbryRequests implements RequestAPI {
 
-  private StoreManager storeManager;
+  private StorageManager storageManager;
   private final RequestResponseChannel requestResponseChannel;
   private Logger logger = LoggerFactory.getLogger(getClass());
   private Logger publicAccessLogger = LoggerFactory.getLogger("PublicAccessLogger");
@@ -56,11 +95,11 @@ public class AmbryRequests implements RequestAPI {
   private final ReplicationManager replicationManager;
   private final StoreKeyFactory storeKeyFactory;
 
-  public AmbryRequests(StoreManager storeManager, RequestResponseChannel requestResponseChannel, ClusterMap clusterMap,
-                       DataNodeId nodeId, MetricRegistry registry, FindTokenFactory findTokenFactory,
-                       NotificationSystem operationNotification, ReplicationManager replicationManager,
-                       StoreKeyFactory storeKeyFactory) {
-    this.storeManager = storeManager;
+  public AmbryRequests(StorageManager storageManager, RequestResponseChannel requestResponseChannel,
+      ClusterMap clusterMap, DataNodeId nodeId, MetricRegistry registry, FindTokenFactory findTokenFactory,
+      NotificationSystem operationNotification, ReplicationManager replicationManager,
+      StoreKeyFactory storeKeyFactory) {
+    this.storageManager = storageManager;
     this.requestResponseChannel = requestResponseChannel;
     this.clusterMap = clusterMap;
     this.currentNode = nodeId;
@@ -72,8 +111,7 @@ public class AmbryRequests implements RequestAPI {
     this.storeKeyFactory = storeKeyFactory;
   }
 
-  public void handleRequests(Request request)
-      throws InterruptedException {
+  public void handleRequests(Request request) throws InterruptedException {
     try {
       DataInputStream stream = new DataInputStream(request.getInputStream());
       RequestOrResponseType type = RequestOrResponseType.values()[stream.readShort()];
@@ -99,8 +137,7 @@ public class AmbryRequests implements RequestAPI {
     }
   }
 
-  public void handlePutRequest(Request request)
-      throws IOException, InterruptedException {
+  public void handlePutRequest(Request request) throws IOException, InterruptedException {
     PutRequest.ReceivedPutRequest receivedRequest =
         PutRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap);
     long requestQueueTime = SystemTime.getInstance().milliseconds() - request.getStartTimeInMs();
@@ -119,13 +156,13 @@ public class AmbryRequests implements RequestAPI {
             new PutMessageFormatInputStream(receivedRequest.getBlobId(), receivedRequest.getBlobProperties(),
                 receivedRequest.getUsermetadata(), receivedRequest.getBlobStream(), receivedRequest.getBlobSize(),
                 receivedRequest.getBlobType());
-        MessageInfo info = new MessageInfo(receivedRequest.getBlobId(), stream.getSize(), Utils
-            .addSecondsToEpochTime(receivedRequest.getBlobProperties().getCreationTimeInMs(),
+        MessageInfo info = new MessageInfo(receivedRequest.getBlobId(), stream.getSize(),
+            Utils.addSecondsToEpochTime(receivedRequest.getBlobProperties().getCreationTimeInMs(),
                 receivedRequest.getBlobProperties().getTimeToLiveInSeconds()));
         ArrayList<MessageInfo> infoList = new ArrayList<MessageInfo>();
         infoList.add(info);
         MessageFormatWriteSet writeset = new MessageFormatWriteSet(stream, infoList, false);
-        Store storeToPut = storeManager.getStore(receivedRequest.getBlobId().getPartition());
+        Store storeToPut = storageManager.getStore(receivedRequest.getBlobId().getPartition());
         storeToPut.put(writeset);
         response = new PutResponse(receivedRequest.getCorrelationId(), receivedRequest.getClientId(),
             ServerErrorCode.No_Error);
@@ -137,8 +174,8 @@ public class AmbryRequests implements RequestAPI {
         }
       }
     } catch (StoreException e) {
-      logger
-          .error("Store exception on a put with error code " + e.getErrorCode() + " for request " + receivedRequest, e);
+      logger.error("Store exception on a put with error code " + e.getErrorCode() + " for request " + receivedRequest,
+          e);
       if (e.getErrorCode() == StoreErrorCodes.Already_Exist) {
         metrics.idAlreadyExistError.inc();
       } else if (e.getErrorCode() == StoreErrorCodes.IOError) {
@@ -163,8 +200,7 @@ public class AmbryRequests implements RequestAPI {
         metrics);
   }
 
-  public void handleGetRequest(Request request)
-      throws IOException, InterruptedException {
+  public void handleGetRequest(Request request) throws IOException, InterruptedException {
     GetRequest getRequest = GetRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap);
     Histogram responseQueueTime = null;
     Histogram responseSendTime = null;
@@ -218,16 +254,16 @@ public class AmbryRequests implements RequestAPI {
           partitionResponseInfoList.add(partitionResponseInfo);
         } else {
           try {
-            Store storeToGet = storeManager.getStore(partitionRequestInfo.getPartition());
+            Store storeToGet = storageManager.getStore(partitionRequestInfo.getPartition());
             EnumSet<StoreGetOptions> storeGetOptions = EnumSet.noneOf(StoreGetOptions.class);
             // Currently only one option is supported.
-            if (getRequest.getGetOptions() == GetOptions.Include_Expired_Blobs) {
+            if (getRequest.getGetOption() == GetOption.Include_Expired_Blobs) {
               storeGetOptions = EnumSet.of(StoreGetOptions.Store_Include_Expired);
             }
-            if (getRequest.getGetOptions() == GetOptions.Include_Deleted_Blobs) {
+            if (getRequest.getGetOption() == GetOption.Include_Deleted_Blobs) {
               storeGetOptions = EnumSet.of(StoreGetOptions.Store_Include_Deleted);
             }
-            if (getRequest.getGetOptions() == GetOptions.Include_All) {
+            if (getRequest.getGetOption() == GetOption.Include_All) {
               storeGetOptions =
                   EnumSet.of(StoreGetOptions.Store_Include_Deleted, StoreGetOptions.Store_Include_Expired);
             }
@@ -241,28 +277,29 @@ public class AmbryRequests implements RequestAPI {
             partitionResponseInfoList.add(partitionResponseInfo);
           } catch (StoreException e) {
             if (e.getErrorCode() == StoreErrorCodes.ID_Not_Found) {
-              logger.trace("Store exception on a get with error code " + e.getErrorCode() + " " +
-                  "for partition " + partitionRequestInfo.getPartition(), e);
+              logger.trace("Store exception on a get with error code " + e.getErrorCode() + " " + "for partition "
+                  + partitionRequestInfo.getPartition(), e);
               metrics.idNotFoundError.inc();
             } else if (e.getErrorCode() == StoreErrorCodes.TTL_Expired) {
-              logger.trace("Store exception on a get with error code " + e.getErrorCode() + " " +
-                  "for partition " + partitionRequestInfo.getPartition(), e);
+              logger.trace("Store exception on a get with error code " + e.getErrorCode() + " " + "for partition "
+                  + partitionRequestInfo.getPartition(), e);
               metrics.ttlExpiredError.inc();
             } else if (e.getErrorCode() == StoreErrorCodes.ID_Deleted) {
-              logger.trace("Store exception on a get with error code " + e.getErrorCode() + " " +
-                  "for partition " + partitionRequestInfo.getPartition(), e);
+              logger.trace("Store exception on a get with error code " + e.getErrorCode() + " " + "for partition "
+                  + partitionRequestInfo.getPartition(), e);
               metrics.idDeletedError.inc();
             } else {
-              logger.error("Store exception on a get with error code " + e.getErrorCode() +
-                  " for partition " + partitionRequestInfo.getPartition(), e);
+              logger.error("Store exception on a get with error code " + e.getErrorCode() + " for partition "
+                  + partitionRequestInfo.getPartition(), e);
               metrics.unExpectedStoreGetError.inc();
             }
             PartitionResponseInfo partitionResponseInfo = new PartitionResponseInfo(partitionRequestInfo.getPartition(),
                 ErrorMapping.getStoreErrorMapping(e.getErrorCode()));
             partitionResponseInfoList.add(partitionResponseInfo);
           } catch (MessageFormatException e) {
-            logger.error("Message format exception on a get with error code " + e.getErrorCode() +
-                " for partitionRequestInfo " + partitionRequestInfo, e);
+            logger.error(
+                "Message format exception on a get with error code " + e.getErrorCode() + " for partitionRequestInfo "
+                    + partitionRequestInfo, e);
             if (e.getErrorCode() == MessageFormatErrorCodes.Data_Corrupt) {
               metrics.dataCorruptError.inc();
             } else if (e.getErrorCode() == MessageFormatErrorCodes.Unknown_Format_Version) {
@@ -301,8 +338,7 @@ public class AmbryRequests implements RequestAPI {
         totalTimeSpent, response.sizeInBytes(), getRequest.getMessageFormatFlag(), metrics);
   }
 
-  public void handleDeleteRequest(Request request)
-      throws IOException, InterruptedException {
+  public void handleDeleteRequest(Request request) throws IOException, InterruptedException {
     DeleteRequest deleteRequest = DeleteRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap);
     long requestQueueTime = SystemTime.getInstance().milliseconds() - request.getStartTimeInMs();
     long totalTimeSpent = requestQueueTime;
@@ -321,32 +357,31 @@ public class AmbryRequests implements RequestAPI {
         ArrayList<MessageInfo> infoList = new ArrayList<MessageInfo>();
         infoList.add(info);
         MessageFormatWriteSet writeset = new MessageFormatWriteSet(stream, infoList, false);
-        Store storeToDelete = storeManager.getStore(deleteRequest.getBlobId().getPartition());
+        Store storeToDelete = storageManager.getStore(deleteRequest.getBlobId().getPartition());
         storeToDelete.delete(writeset);
         response =
             new DeleteResponse(deleteRequest.getCorrelationId(), deleteRequest.getClientId(), ServerErrorCode.No_Error);
         if (notification != null) {
-          notification
-              .onBlobReplicaDeleted(currentNode.getHostname(), currentNode.getPort(), deleteRequest.getBlobId().getID(),
-                  BlobReplicaSourceType.PRIMARY);
+          notification.onBlobReplicaDeleted(currentNode.getHostname(), currentNode.getPort(),
+              deleteRequest.getBlobId().getID(), BlobReplicaSourceType.PRIMARY);
         }
       }
     } catch (StoreException e) {
       if (e.getErrorCode() == StoreErrorCodes.ID_Not_Found) {
-        logger.trace("Store exception on a delete with error code " + e.getErrorCode() +
-            " for request " + deleteRequest, e);
+        logger.trace(
+            "Store exception on a delete with error code " + e.getErrorCode() + " for request " + deleteRequest, e);
         metrics.idNotFoundError.inc();
       } else if (e.getErrorCode() == StoreErrorCodes.TTL_Expired) {
-        logger.trace("Store exception on a delete with error code " + e.getErrorCode() +
-            " for request " + deleteRequest, e);
+        logger.trace(
+            "Store exception on a delete with error code " + e.getErrorCode() + " for request " + deleteRequest, e);
         metrics.ttlExpiredError.inc();
       } else if (e.getErrorCode() == StoreErrorCodes.ID_Deleted) {
-        logger.trace("Store exception on a delete with error code " + e.getErrorCode() +
-            " for request " + deleteRequest, e);
+        logger.trace(
+            "Store exception on a delete with error code " + e.getErrorCode() + " for request " + deleteRequest, e);
         metrics.idDeletedError.inc();
       } else {
-        logger.error("Store exception on a delete with error code " + e.getErrorCode() +
-            " for request " + deleteRequest, e);
+        logger.error(
+            "Store exception on a delete with error code " + e.getErrorCode() + " for request " + deleteRequest, e);
         metrics.unExpectedStoreDeleteError.inc();
       }
       response = new DeleteResponse(deleteRequest.getCorrelationId(), deleteRequest.getClientId(),
@@ -367,8 +402,7 @@ public class AmbryRequests implements RequestAPI {
             metrics.deleteBlobTotalTimeInMs, null, null, totalTimeSpent));
   }
 
-  public void handleReplicaMetadataRequest(Request request)
-      throws IOException, InterruptedException {
+  public void handleReplicaMetadataRequest(Request request) throws IOException, InterruptedException {
     ReplicaMetadataRequest replicaMetadataRequest =
         ReplicaMetadataRequest.readFrom(new DataInputStream(request.getInputStream()), clusterMap, findTokenFactory);
     long requestQueueTime = SystemTime.getInstance().milliseconds() - request.getStartTimeInMs();
@@ -400,7 +434,7 @@ public class AmbryRequests implements RequestAPI {
             FindToken findToken = replicaMetadataRequestInfo.getToken();
             String hostName = replicaMetadataRequestInfo.getHostName();
             String replicaPath = replicaMetadataRequestInfo.getReplicaPath();
-            Store store = storeManager.getStore(partitionId);
+            Store store = storageManager.getStore(partitionId);
 
             partitionStartTimeInMs = SystemTime.getInstance().milliseconds();
             FindInfo findInfo =
@@ -425,8 +459,9 @@ public class AmbryRequests implements RequestAPI {
                     remoteReplicaLagInBytes);
             replicaMetadataResponseList.add(replicaMetadataResponseInfo);
           } catch (StoreException e) {
-            logger.error("Store exception on a replica metadata request with error code " + e.getErrorCode() +
-                " for partition " + partitionId, e);
+            logger.error(
+                "Store exception on a replica metadata request with error code " + e.getErrorCode() + " for partition "
+                    + partitionId, e);
             if (e.getErrorCode() == StoreErrorCodes.IOError) {
               metrics.storeIOError.inc();
             } else {
@@ -460,9 +495,8 @@ public class AmbryRequests implements RequestAPI {
   }
 
   private void sendPutResponse(RequestResponseChannel requestResponseChannel, PutResponse response, Request request,
-                               Histogram responseQueueTime, Histogram responseSendTime, Histogram requestTotalTime, long totalTimeSpent,
-                               long blobSize, ServerMetrics metrics)
-      throws InterruptedException {
+      Histogram responseQueueTime, Histogram responseSendTime, Histogram requestTotalTime, long totalTimeSpent,
+      long blobSize, ServerMetrics metrics) throws InterruptedException {
     if (response.getError() == ServerErrorCode.No_Error) {
       metrics.markPutBlobRequestRateBySize(blobSize);
       if (blobSize <= ServerMetrics.smallBlob) {
@@ -486,9 +520,8 @@ public class AmbryRequests implements RequestAPI {
   }
 
   private void sendGetResponse(RequestResponseChannel requestResponseChannel, GetResponse response, Request request,
-                               Histogram responseQueueTime, Histogram responseSendTime, Histogram requestTotalTime, long totalTimeSpent,
-                               long blobSize, MessageFormatFlags flags, ServerMetrics metrics)
-      throws InterruptedException {
+      Histogram responseQueueTime, Histogram responseSendTime, Histogram requestTotalTime, long totalTimeSpent,
+      long blobSize, MessageFormatFlags flags, ServerMetrics metrics) throws InterruptedException {
 
     if (blobSize <= ServerMetrics.smallBlob) {
       if (flags == MessageFormatFlags.Blob) {
@@ -544,11 +577,30 @@ public class AmbryRequests implements RequestAPI {
     }
   }
 
+  /**
+   * Check that the provided partition is valid, on the disk, and can be written to.
+   * @param partition the partition to validate.
+   * @param checkPartitionState {@code true} to check if a partition is read-write.
+   * @return {@link ServerErrorCode#No_Error} error if the partition can be written to, or the corresponding error code
+   *         if it cannot.
+   */
   private ServerErrorCode validateRequest(PartitionId partition, boolean checkPartitionState) {
-    // 1. check if partition exist on this node
-    if (storeManager.getStore(partition) == null) {
-      metrics.partitionUnknownError.inc();
-      return ServerErrorCode.Partition_Unknown;
+    // 1. check if partition exists on this node and that the store for this partition has been started
+    if (storageManager.getStore(partition) == null) {
+      boolean partitionPresent = false;
+      for (ReplicaId replica : partition.getReplicaIds()) {
+        if (replica.getDataNodeId().equals(currentNode)) {
+          partitionPresent = true;
+          break;
+        }
+      }
+      if (partitionPresent) {
+        metrics.diskUnavailableError.inc();
+        return ServerErrorCode.Disk_Unavailable;
+      } else {
+        metrics.partitionUnknownError.inc();
+        return ServerErrorCode.Partition_Unknown;
+      }
     }
     // 2. ensure the disk for the partition/replica is available
     List<ReplicaId> replicaIds = partition.getReplicaIds();

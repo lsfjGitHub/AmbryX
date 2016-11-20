@@ -14,7 +14,6 @@
 package com.github.ambry.messageformat;
 
 import com.github.ambry.utils.Utils;
-
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -24,7 +23,7 @@ import java.nio.ByteBuffer;
 // properties in BlobProperties that are not user editable
 class SystemMetadata extends BlobProperties {
   public SystemMetadata(long blobSize, String serviceId, String ownerId, String contentType, boolean isPrivate,
-                        long timeToLiveInSeconds, long creationTime) {
+      long timeToLiveInSeconds, long creationTime) {
     super(blobSize, serviceId, ownerId, contentType, isPrivate, timeToLiveInSeconds);
     this.creationTimeInMs = creationTime;
   }
@@ -44,18 +43,14 @@ public class BlobPropertiesSerDe {
   private static final int BlobSize_Field_Size_In_Bytes = 8;
 
   public static int getBlobPropertiesSize(BlobProperties properties) {
-    return Version_Field_Size_In_Bytes +
-        TTL_Field_Size_In_Bytes +
-        Private_Field_Size_In_Bytes +
-        CreationTime_Field_Size_In_Bytes +
-        BlobSize_Field_Size_In_Bytes +
-        Variable_Field_Size_In_Bytes + Utils.getNullableStringLength(properties.getContentType()) +
-        Variable_Field_Size_In_Bytes + Utils.getNullableStringLength(properties.getOwnerId()) +
-        Variable_Field_Size_In_Bytes + Utils.getNullableStringLength(properties.getServiceId());
+    return Version_Field_Size_In_Bytes + TTL_Field_Size_In_Bytes + Private_Field_Size_In_Bytes
+        + CreationTime_Field_Size_In_Bytes + BlobSize_Field_Size_In_Bytes + Variable_Field_Size_In_Bytes
+        + Utils.getNullableStringLength(properties.getContentType()) + Variable_Field_Size_In_Bytes
+        + Utils.getNullableStringLength(properties.getOwnerId()) + Variable_Field_Size_In_Bytes
+        + Utils.getNullableStringLength(properties.getServiceId());
   }
 
-  public static BlobProperties getBlobPropertiesFromStream(DataInputStream stream)
-      throws IOException {
+  public static BlobProperties getBlobPropertiesFromStream(DataInputStream stream) throws IOException {
     long version = stream.readShort();
     if (version == Version1) {
       long ttl = stream.readLong();

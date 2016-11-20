@@ -15,7 +15,6 @@
 package com.github.ambry.messageformat;
 
 import com.github.ambry.store.StoreKey;
-
 import java.util.List;
 
 

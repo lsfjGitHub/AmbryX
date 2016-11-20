@@ -20,12 +20,6 @@ import com.github.ambry.network.PortType;
 import com.github.ambry.network.SSLFactory;
 import com.github.ambry.network.TestSSLUtils;
 import com.github.ambry.utils.SystemTime;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
-
-import javax.net.ssl.SSLContext;
-import javax.net.ssl.SSLSocketFactory;
 import java.io.File;
 import java.io.IOException;
 import java.net.URISyntaxException;
@@ -34,6 +28,11 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Properties;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLSocketFactory;
+import org.junit.After;
+import org.junit.Before;
+import org.junit.Test;
 
 
 public class ServerSSLTokenTest {
@@ -47,17 +46,16 @@ public class ServerSSLTokenTest {
   private static MockCluster sslCluster;
 
   @Before
-  public void initializeTests()
-      throws Exception {
+  public void initializeTests() throws Exception {
     trustStoreFile = File.createTempFile("truststore", ".jks");
-    clientSSLConfig = TestSSLUtils.createSSLConfig("DC2,DC3", SSLFactory.Mode.CLIENT, trustStoreFile, "client1");
+    clientSSLConfig =
+        new SSLConfig(TestSSLUtils.createSslProps("DC2,DC3", SSLFactory.Mode.CLIENT, trustStoreFile, "client1"));
     serverSSLProps = new Properties();
     TestSSLUtils.addSSLProperties(serverSSLProps, "DC1,DC2,DC3", SSLFactory.Mode.SERVER, trustStoreFile, "server");
     routerProps = new Properties();
-    TestSSLUtils.addSSLProperties(routerProps, "", SSLFactory.Mode.CLIENT, trustStoreFile, "router-client");
+    TestSSLUtils.addSSLProperties(routerProps, "DC1,DC2,DC3", SSLFactory.Mode.CLIENT, trustStoreFile, "router-client");
     notificationSystem = new MockNotificationSystem(9);
-    sslCluster =
-        new MockCluster(notificationSystem, true, "DC1,DC2,DC3", serverSSLProps, false, SystemTime.getInstance());
+    sslCluster = new MockCluster(notificationSystem, serverSSLProps, false, SystemTime.getInstance());
     sslCluster.startServers();
     //client
     sslFactory = new SSLFactory(clientSSLConfig);
@@ -66,8 +64,7 @@ public class ServerSSLTokenTest {
   }
 
   @After
-  public void cleanup()
-      throws IOException {
+  public void cleanup() throws IOException {
     long start = System.currentTimeMillis();
     // cleanup appears to hang sometimes. And, it sometimes takes a long time. Printing some info until cleanup is fast
     // and reliable.

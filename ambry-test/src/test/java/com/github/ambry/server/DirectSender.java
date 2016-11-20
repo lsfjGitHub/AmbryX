@@ -22,8 +22,6 @@ import com.github.ambry.messageformat.BlobType;
 import com.github.ambry.network.BlockingChannel;
 import com.github.ambry.protocol.PutRequest;
 import com.github.ambry.protocol.PutResponse;
-import org.junit.Assert;
-
 import java.io.DataInputStream;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
@@ -31,6 +29,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 import java.util.concurrent.CountDownLatch;
+import org.junit.Assert;
 
 
 /**
@@ -46,7 +45,7 @@ class DirectSender implements Runnable {
   CountDownLatch endLatch;
 
   public DirectSender(MockCluster cluster, BlockingChannel channel, int totalBlobsToPut, byte[] data,
-                      byte[] usermetadata, BlobProperties blobProperties, CountDownLatch endLatch) {
+      byte[] usermetadata, BlobProperties blobProperties, CountDownLatch endLatch) {
     MockClusterMap clusterMap = cluster.getClusterMap();
     this.channel = channel;
     blobIds = new ArrayList<BlobId>(totalBlobsToPut);

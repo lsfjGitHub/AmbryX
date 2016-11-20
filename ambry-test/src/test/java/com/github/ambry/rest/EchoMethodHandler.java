@@ -17,12 +17,23 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
-import io.netty.handler.codec.http.*;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
+import io.netty.handler.codec.http.DefaultFullHttpResponse;
+import io.netty.handler.codec.http.DefaultHttpContent;
+import io.netty.handler.codec.http.DefaultHttpResponse;
+import io.netty.handler.codec.http.DefaultLastHttpContent;
+import io.netty.handler.codec.http.FullHttpResponse;
+import io.netty.handler.codec.http.HttpContent;
+import io.netty.handler.codec.http.HttpHeaders;
+import io.netty.handler.codec.http.HttpObject;
+import io.netty.handler.codec.http.HttpRequest;
+import io.netty.handler.codec.http.HttpResponse;
+import io.netty.handler.codec.http.HttpResponseStatus;
+import io.netty.handler.codec.http.HttpVersion;
+import io.netty.handler.codec.http.LastHttpContent;
 import java.util.ArrayList;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -43,8 +54,7 @@ public class EchoMethodHandler extends SimpleChannelInboundHandler<HttpObject> {
   public static final String RESPONSE_HEADER_KEY_2 = RESPONSE_HEADER_KEY_PREFIX + "_2";
 
   @Override
-  public void channelRead0(ChannelHandlerContext ctx, HttpObject obj)
-      throws Exception {
+  public void channelRead0(ChannelHandlerContext ctx, HttpObject obj) throws Exception {
     logger.trace("Reading on channel {}", ctx.channel());
     if (obj instanceof HttpRequest) {
       HttpRequest request = (HttpRequest) obj;

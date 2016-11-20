@@ -32,13 +32,18 @@ import com.github.ambry.protocol.PutResponse;
 import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.store.StoreKey;
 import com.github.ambry.utils.Time;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.nio.ByteBuffer;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.TreeMap;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicReference;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -142,24 +147,23 @@ class PutOperation {
    * @throws RouterException if there is an error in constructing the PutOperation with the given parameters.
    */
   PutOperation(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, ClusterMap clusterMap,
-               ResponseHandler responseHandler, BlobProperties blobProperties, byte[] userMetadata,
-               ReadableStreamChannel channel, FutureResult<String> futureResult, Callback<String> callback,
-               ReadyForPollCallback readyForPollCallback,
-               ByteBufferAsyncWritableChannel.ChannelEventListener writableChannelEventListener, Time time)
+      ResponseHandler responseHandler, BlobProperties blobProperties, byte[] userMetadata,
+      ReadableStreamChannel channel, FutureResult<String> futureResult, Callback<String> callback,
+      ReadyForPollCallback readyForPollCallback,
+      ByteBufferAsyncWritableChannel.ChannelEventListener writableChannelEventListener, Time time)
       throws RouterException {
     submissionTimeMs = time.milliseconds();
     blobSize = blobProperties.getBlobSize();
     if (channel.getSize() != blobSize) {
-      throw new RouterException(
-          "Channel size: " + channel.getSize() + " different from size in BlobProperties: " + blobProperties
-              .getBlobSize(), RouterErrorCode.BadInputChannel);
+      throw new RouterException("Channel size: " + channel.getSize() + " different from size in BlobProperties: "
+          + blobProperties.getBlobSize(), RouterErrorCode.BadInputChannel);
     }
     // Set numDataChunks
     // the max blob size that can be supported is technically limited by the max chunk size configured.
     long numDataChunksL = blobSize == 0 ? 1 : (blobSize - 1) / routerConfig.routerMaxPutChunkSizeBytes + 1;
     if (numDataChunksL > Integer.MAX_VALUE) {
-      throw new RouterException("Cannot support a blob size of " + blobSize + " with a chunk size of " +
-          routerConfig.routerMaxPutChunkSizeBytes, RouterErrorCode.BlobTooLarge);
+      throw new RouterException("Cannot support a blob size of " + blobSize + " with a chunk size of "
+          + routerConfig.routerMaxPutChunkSizeBytes, RouterErrorCode.BlobTooLarge);
     }
     numDataChunks = (int) numDataChunksL;
     this.routerConfig = routerConfig;
@@ -195,8 +199,9 @@ class PutOperation {
         if (exception != null) {
           setOperationExceptionAndComplete(exception);
         } else if (result != blobSize) {
-          setOperationExceptionAndComplete(new RouterException("Incorrect number of bytes: " + result +
-              " read in from the channel, expected: " + blobSize, RouterErrorCode.BadInputChannel));
+          setOperationExceptionAndComplete(new RouterException(
+              "Incorrect number of bytes: " + result + " read in from the channel, expected: " + blobSize,
+              RouterErrorCode.BadInputChannel));
         }
       }
     });
@@ -250,8 +255,8 @@ class PutOperation {
    * @param putResponse the {@link PutResponse} associated with this response.
    */
   void handleResponse(ResponseInfo responseInfo, PutResponse putResponse) {
-    PutChunk putChunk = correlationIdToPutChunk
-        .remove(((RequestOrResponse) responseInfo.getRequestInfo().getRequest()).getCorrelationId());
+    PutChunk putChunk = correlationIdToPutChunk.remove(
+        ((RequestOrResponse) responseInfo.getRequestInfo().getRequest()).getCorrelationId());
     putChunk.handleResponse(responseInfo, putResponse);
     if (putChunk.isComplete()) {
       onChunkOperationComplete(putChunk);
@@ -853,8 +858,8 @@ class PutOperation {
         PutRequest putRequest = createPutRequest();
         RouterRequestInfo request = new RouterRequestInfo(hostname, port, putRequest, replicaId);
         int correlationId = putRequest.getCorrelationId();
-        correlationIdToChunkPutRequestInfo
-            .put(correlationId, new ChunkPutRequestInfo(replicaId, putRequest, time.milliseconds()));
+        correlationIdToChunkPutRequestInfo.put(correlationId,
+            new ChunkPutRequestInfo(replicaId, putRequest, time.milliseconds()));
         correlationIdToPutChunk.put(correlationId, this);
         requestRegistrationCallback.registerRequestToSend(PutOperation.this, request);
         replicaIterator.remove();
@@ -883,8 +888,7 @@ class PutOperation {
      * @return the chosen {@link PartitionId}
      * @throws RouterException
      */
-    protected PartitionId getPartitionForPut(List<PartitionId> partitionIdsToExclude)
-        throws RouterException {
+    protected PartitionId getPartitionForPut(List<PartitionId> partitionIdsToExclude) throws RouterException {
       // getWritablePartitions creates and returns a new list, so it is safe to manipulate it.
       List<PartitionId> partitions = clusterMap.getWritablePartitionIds();
       partitions.removeAll(partitionIdsToExclude);
@@ -916,8 +920,8 @@ class PutOperation {
       }
       long requestLatencyMs = time.milliseconds() - chunkPutRequestInfo.startTimeMs;
       routerMetrics.routerRequestLatencyMs.update(requestLatencyMs);
-      routerMetrics.getDataNodeBasedMetrics(chunkPutRequestInfo.replicaId.getDataNodeId()).putRequestLatencyMs
-          .update(requestLatencyMs);
+      routerMetrics.getDataNodeBasedMetrics(chunkPutRequestInfo.replicaId.getDataNodeId()).putRequestLatencyMs.update(
+          requestLatencyMs);
       boolean isSuccessful;
       if (responseInfo.getError() != null) {
         setChunkException(new RouterException("Operation timed out", RouterErrorCode.OperationTimedOut));
@@ -1077,8 +1081,8 @@ class PutOperation {
         maxFilledChunkIndex = chunkIndex;
       }
       if (chunksDone == numDataChunks) {
-        buf = MetadataContentSerDe
-            .serializeMetadataContent(routerConfig.routerMaxPutChunkSizeBytes, blobSize, Arrays.asList(chunkIds));
+        buf = MetadataContentSerDe.serializeMetadataContent(routerConfig.routerMaxPutChunkSizeBytes, blobSize,
+            Arrays.asList(chunkIds));
         onFillComplete();
       }
     }
@@ -1116,16 +1120,13 @@ class PutOperation {
     /**
      * The Chunk is free and can be filled with data.
      */
-    Free,
-    /**
+    Free, /**
      * The Chunk is being built. It may have some data but is not yet ready to be sent.
      */
-    Building,
-    /**
+    Building, /**
      * The Chunk is ready to be sent out.
      */
-    Ready,
-    /**
+    Ready, /**
      * The Chunk is complete.
      */
     Complete,

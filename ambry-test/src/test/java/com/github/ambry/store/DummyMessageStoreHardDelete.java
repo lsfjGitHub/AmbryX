@@ -30,7 +30,7 @@ public class DummyMessageStoreHardDelete implements MessageStoreHardDelete {
 
   @Override
   public Iterator<HardDeleteInfo> getHardDeleteMessages(MessageReadSet readSet, StoreKeyFactory factory,
-                                                        List<byte[]> recoveryInfoList) {
+      List<byte[]> recoveryInfoList) {
     return new Iterator<HardDeleteInfo>() {
       @Override
       public boolean hasNext() {

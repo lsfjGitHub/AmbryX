@@ -14,14 +14,15 @@
 package com.github.ambry.store;
 
 import com.github.ambry.utils.ByteBufferInputStream;
+import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
-import com.github.ambry.utils.UtilsTest;
-import org.junit.Test;
-
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Random;
+import org.junit.Test;
 
 import static org.junit.Assert.*;
 
@@ -36,9 +37,10 @@ public class OffsetTest {
    * @throws IOException
    */
   @Test
-  public void offsetSerDeTest()
-      throws IOException {
-    String name = UtilsTest.getRandomString(10);
+  public void offsetSerDeTest() throws IOException {
+    long pos = Utils.getRandomLong(TestUtils.RANDOM, 1000);
+    long gen = Utils.getRandomLong(TestUtils.RANDOM, 1000);
+    String name = LogSegmentNameHelper.getName(pos, gen);
     long offset = Utils.getRandomLong(new Random(), Long.MAX_VALUE);
     Offset logOffset = new Offset(name, offset);
     byte[] serialized = logOffset.toBytes();
@@ -59,10 +61,8 @@ public class OffsetTest {
    * @throws IOException
    */
   @Test
-  public void offsetBadInputTest()
-      throws IOException {
+  public void offsetBadInputTest() throws IOException {
     doBadOffsetInputTest(null, 10);
-    doBadOffsetInputTest("", 10);
     doBadOffsetInputTest("1_11_log", -1);
 
     Offset offset = new Offset("1_11_log", 10);
@@ -82,13 +82,20 @@ public class OffsetTest {
    */
   @Test
   public void compareToTest() {
-    // TODO (Log Segmentation): Improve and add more cases once compareTo also uses the name.
-    Offset lower = new Offset("lower", 1);
-    Offset match = new Offset("match", 1);
-    Offset higher = new Offset("higher", 2);
-    assertEquals("CompareTo result is inconsistent", -1, lower.compareTo(higher));
-    assertEquals("CompareTo result is inconsistent", 0, lower.compareTo(match));
-    assertEquals("CompareTo result is inconsistent", 1, higher.compareTo(lower));
+    List<Offset> offsets = new ArrayList<>();
+    offsets.add(new Offset("0_0", 0));
+    offsets.add(new Offset("0_0", 1));
+    offsets.add(new Offset("0_1", 0));
+    offsets.add(new Offset("0_1", 1));
+    offsets.add(new Offset("1_0", 0));
+    offsets.add(new Offset("1_0", 1));
+    for (int i = 0; i < offsets.size(); i++) {
+      for (int j = 0; j < offsets.size(); j++) {
+        int expectCompare = i == j ? 0 : i > j ? 1 : -1;
+        assertEquals("Unexpected value on compare", expectCompare, offsets.get(i).compareTo(offsets.get(j)));
+        assertEquals("Unexpected value on compare", -1 * expectCompare, offsets.get(j).compareTo(offsets.get(i)));
+      }
+    }
   }
 
   /**
@@ -96,10 +103,10 @@ public class OffsetTest {
    */
   @Test
   public void equalsAndHashCodeTest() {
-    Offset o1 = new Offset("test", 2);
-    Offset o2 = new Offset("test", 2);
-    Offset o3 = new Offset("test", 3);
-    Offset o4 = new Offset("test_more", 2);
+    Offset o1 = new Offset("1_1", 2);
+    Offset o2 = new Offset("1_1", 2);
+    Offset o3 = new Offset("1_1", 3);
+    Offset o4 = new Offset("1_2", 2);
 
     assertTrue("Offset should be equal to itself", o1.equals(o1));
     assertFalse("Offset should not be equal to null", o1.equals(null));
@@ -109,11 +116,7 @@ public class OffsetTest {
     assertEquals("Hashcode mismatch", o1.hashCode(), o2.hashCode());
 
     assertFalse("Offsets should be declared unequal", o1.equals(o3));
-
-    // TODO (Log Segmentation): Uncomment when compareTo() can handle different offset names.
-    /*
     assertFalse("Offsets should be declared unequal", o1.equals(o4));
-    */
   }
 
   // helpers

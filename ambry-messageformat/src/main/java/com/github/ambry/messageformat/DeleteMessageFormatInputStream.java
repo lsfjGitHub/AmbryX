@@ -14,7 +14,6 @@
 package com.github.ambry.messageformat;
 
 import com.github.ambry.store.StoreKey;
-
 import java.nio.ByteBuffer;
 
 
@@ -32,15 +31,14 @@ import java.nio.ByteBuffer;
  *
  */
 public class DeleteMessageFormatInputStream extends MessageFormatInputStream {
-  public DeleteMessageFormatInputStream(StoreKey key)
-      throws MessageFormatException {
+  public DeleteMessageFormatInputStream(StoreKey key) throws MessageFormatException {
     int headerSize = MessageFormatRecord.MessageHeader_Format_V1.getHeaderSize();
     int deleteRecordSize = MessageFormatRecord.Delete_Format_V1.getDeleteRecordSize();
     buffer = ByteBuffer.allocate(headerSize + key.sizeInBytes() + deleteRecordSize);
-    MessageFormatRecord.MessageHeader_Format_V1
-        .serializeHeader(buffer, deleteRecordSize, MessageFormatRecord.Message_Header_Invalid_Relative_Offset,
-            headerSize + key.sizeInBytes(), MessageFormatRecord.Message_Header_Invalid_Relative_Offset,
-            MessageFormatRecord.Message_Header_Invalid_Relative_Offset);
+    MessageFormatRecord.MessageHeader_Format_V1.serializeHeader(buffer, deleteRecordSize,
+        MessageFormatRecord.Message_Header_Invalid_Relative_Offset, headerSize + key.sizeInBytes(),
+        MessageFormatRecord.Message_Header_Invalid_Relative_Offset,
+        MessageFormatRecord.Message_Header_Invalid_Relative_Offset);
     buffer.put(key.toBytes());
     // set the message as deleted
     MessageFormatRecord.Delete_Format_V1.serializeDeleteRecord(buffer, true);

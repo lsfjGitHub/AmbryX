@@ -19,9 +19,6 @@ import com.github.ambry.store.StoreKey;
 import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.ByteBufferOutputStream;
 import com.github.ambry.utils.SystemTime;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -29,6 +26,8 @@ import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.nio.channels.WritableByteChannel;
 import java.util.ArrayList;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -67,8 +66,7 @@ public class MessageFormatSend implements Send {
   }
 
   public MessageFormatSend(MessageReadSet readSet, MessageFormatFlags flag, MessageFormatMetrics metrics,
-                           StoreKeyFactory storeKeyFactory)
-      throws IOException, MessageFormatException {
+      StoreKeyFactory storeKeyFactory) throws IOException, MessageFormatException {
     this.readSet = readSet;
     this.flag = flag;
     this.storeKeyFactory = storeKeyFactory;
@@ -83,8 +81,7 @@ public class MessageFormatSend implements Send {
 
   // calculates the offsets from the MessageReadSet that needs to be sent over the network
   // based on the type of data requested as indicated by the flags
-  private void calculateOffsets()
-      throws IOException, MessageFormatException {
+  private void calculateOffsets() throws IOException, MessageFormatException {
     try {
       // get size
       int messageCount = readSet.count();
@@ -130,8 +127,8 @@ public class MessageFormatSend implements Send {
               MessageFormatRecord.MessageHeader_Format_V1 headerFormat =
                   new MessageFormatRecord.MessageHeader_Format_V1(header);
               headerFormat.verifyHeader();
-              StoreKey storeKey = storeKeyFactory
-                  .getStoreKey(new DataInputStream(new MessageReadSetIndexInputStream(readSet, i, header.capacity())));
+              StoreKey storeKey = storeKeyFactory.getStoreKey(
+                  new DataInputStream(new MessageReadSetIndexInputStream(readSet, i, header.capacity())));
               if (storeKey.compareTo(readSet.getKeyAt(i)) != 0) {
                 throw new MessageFormatException(
                     "Id mismatch between metadata and store - metadataId " + readSet.getKeyAt(i) + " storeId "
@@ -142,8 +139,8 @@ public class MessageFormatSend implements Send {
 
               startTime = SystemTime.getInstance().milliseconds();
               if (flag == MessageFormatFlags.BlobProperties) {
-                int blobPropertiesRecordSize = headerFormat.getUserMetadataRecordRelativeOffset() - headerFormat
-                    .getBlobPropertiesRecordRelativeOffset();
+                int blobPropertiesRecordSize = headerFormat.getUserMetadataRecordRelativeOffset()
+                    - headerFormat.getBlobPropertiesRecordRelativeOffset();
 
                 infoList.add(i,
                     new SendInfo(headerFormat.getBlobPropertiesRecordRelativeOffset(), blobPropertiesRecordSize));
@@ -156,8 +153,8 @@ public class MessageFormatSend implements Send {
                 int userMetadataRecordSize =
                     headerFormat.getBlobRecordRelativeOffset() - headerFormat.getUserMetadataRecordRelativeOffset();
 
-                infoList
-                    .add(i, new SendInfo(headerFormat.getUserMetadataRecordRelativeOffset(), userMetadataRecordSize));
+                infoList.add(i,
+                    new SendInfo(headerFormat.getUserMetadataRecordRelativeOffset(), userMetadataRecordSize));
                 totalSizeToWrite += userMetadataRecordSize;
                 logger.trace("Calculate offsets, get total size of user metadata time: {}",
                     SystemTime.getInstance().milliseconds() - startTime);
@@ -175,9 +172,8 @@ public class MessageFormatSend implements Send {
                 logger.trace("Sending blob info (blob properties + user metadata) for message relativeOffset : {} "
                     + "size : {}", infoList.get(i).relativeOffset(), infoList.get(i).sizetoSend());
               } else if (flag == MessageFormatFlags.Blob) {
-                long blobRecordSize =
-                    headerFormat.getMessageSize() - (headerFormat.getBlobRecordRelativeOffset() - headerFormat
-                        .getBlobPropertiesRecordRelativeOffset());
+                long blobRecordSize = headerFormat.getMessageSize() - (headerFormat.getBlobRecordRelativeOffset()
+                    - headerFormat.getBlobPropertiesRecordRelativeOffset());
                 infoList.add(i, new SendInfo(headerFormat.getBlobRecordRelativeOffset(), blobRecordSize));
                 totalSizeToWrite += blobRecordSize;
                 logger.trace("Calculate offsets, get total size of blob time: {}",
@@ -196,8 +192,8 @@ public class MessageFormatSend implements Send {
               }
               break;
             default:
-              String message = "Version not known while reading message - version " + version +
-                  ", StoreKey " + readSet.getKeyAt(i);
+              String message =
+                  "Version not known while reading message - version " + version + ", StoreKey " + readSet.getKeyAt(i);
               throw new MessageFormatException(message, MessageFormatErrorCodes.Unknown_Format_Version);
           }
         }
@@ -209,8 +205,7 @@ public class MessageFormatSend implements Send {
   }
 
   @Override
-  public long writeTo(WritableByteChannel channel)
-      throws IOException {
+  public long writeTo(WritableByteChannel channel) throws IOException {
     long written = 0;
     if (!isSendComplete()) {
       written = readSet.writeTo(currentWriteIndex, channel,
@@ -255,16 +250,16 @@ class MessageReadSetIndexInputStream extends InputStream {
   public MessageReadSetIndexInputStream(MessageReadSet messageReadSet, int indexToRead, int startingOffset) {
     this.messageReadSet = messageReadSet;
     if (indexToRead >= messageReadSet.count()) {
-      throw new IllegalArgumentException("The index provided " + indexToRead + " " +
-          "is outside the bounds of the number of messages in the read set " + messageReadSet.count());
+      throw new IllegalArgumentException(
+          "The index provided " + indexToRead + " " + "is outside the bounds of the number of messages in the read set "
+              + messageReadSet.count());
     }
     this.indexToRead = indexToRead;
     this.currentOffset = startingOffset;
   }
 
   @Override
-  public int read()
-      throws IOException {
+  public int read() throws IOException {
     if (currentOffset == messageReadSet.sizeInBytes(indexToRead)) {
       throw new IOException("Reached end of stream of message read set");
     }
@@ -280,8 +275,7 @@ class MessageReadSetIndexInputStream extends InputStream {
   }
 
   @Override
-  public int read(byte b[], int off, int len)
-      throws IOException {
+  public int read(byte b[], int off, int len) throws IOException {
     if (off < 0 || len < 0 || len > b.length - off) {
       throw new IndexOutOfBoundsException();
     }

@@ -15,8 +15,11 @@ package com.github.ambry.router;
 
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
-
-import java.util.*;
+import java.util.Collections;
+import java.util.Iterator;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.NoSuchElementException;
 
 
 /**
@@ -76,7 +79,7 @@ class SimpleOperationTracker implements OperationTracker {
    * @param shuffleReplicas Indicates if the replicas need to be shuffled.
    */
   SimpleOperationTracker(String datacenterName, PartitionId partitionId, boolean crossColoEnabled, int successTarget,
-                         int parallelism, boolean shuffleReplicas) {
+      int parallelism, boolean shuffleReplicas) {
     this.successTarget = successTarget;
     this.parallelism = parallelism;
     // Order the replicas so that local healthy replicas are ordered and returned first,
@@ -122,7 +125,7 @@ class SimpleOperationTracker implements OperationTracker {
    * @param parallelism The maximum number of inflight requests at any point of time.
    */
   SimpleOperationTracker(String datacenterName, PartitionId partitionId, boolean crossColoEnabled, int successTarget,
-                         int parallelism) {
+      int parallelism) {
     this(datacenterName, partitionId, crossColoEnabled, successTarget, parallelism, true);
   }
 

@@ -20,19 +20,23 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
-import org.junit.Assert;
-import org.junit.Rule;
-import org.junit.Test;
-import org.junit.rules.ExpectedException;
-
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.EnumSet;
+import java.util.List;
+import java.util.Properties;
+import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
+import org.junit.Assert;
+import org.junit.Rule;
+import org.junit.Test;
+import org.junit.rules.ExpectedException;
 
 
 public class PersistentIndexTest {
@@ -1670,18 +1674,18 @@ public class PersistentIndexTest {
 
 class MockIndex extends PersistentIndex {
   public MockIndex(String datadir, ScheduledExecutorService scheduler, Log log, StoreConfig config,
-                   StoreKeyFactory factory, MessageStoreHardDelete messageStoreHardDelete, Time time) throws StoreException {
+      StoreKeyFactory factory, MessageStoreHardDelete messageStoreHardDelete, Time time) throws StoreException {
     super(datadir, scheduler, log, config, factory, new DummyMessageStoreRecovery(), messageStoreHardDelete,
         new StoreMetrics(datadir, new MetricRegistry()), time);
   }
 
   public MockIndex(String datadir, ScheduledExecutorService scheduler, Log log, StoreConfig config,
-                   StoreKeyFactory factory) throws StoreException {
+      StoreKeyFactory factory) throws StoreException {
     this(datadir, scheduler, log, config, factory, new DummyMessageStoreHardDelete(), SystemTime.getInstance());
   }
 
   public MockIndex(String datadir, ScheduledExecutorService scheduler, Log log, StoreConfig config,
-                   StoreKeyFactory factory, Journal journal) throws StoreException {
+      StoreKeyFactory factory, Journal journal) throws StoreException {
     super(datadir, scheduler, log, config, factory, new DummyMessageStoreRecovery(), new DummyMessageStoreHardDelete(),
         new StoreMetrics(datadir, new MetricRegistry()), journal, SystemTime.getInstance());
   }
@@ -1709,7 +1713,7 @@ class MockIndex extends PersistentIndex {
   }
 
   public MockIndex(String datadir, ScheduledExecutorService scheduler, Log log, StoreConfig config,
-                   StoreKeyFactory factory, MessageStoreRecovery recovery, MessageStoreHardDelete cleanup) throws StoreException {
+      StoreKeyFactory factory, MessageStoreRecovery recovery, MessageStoreHardDelete cleanup) throws StoreException {
     super(datadir, scheduler, log, config, factory, recovery, cleanup, new StoreMetrics(datadir, new MetricRegistry()),
         SystemTime.getInstance());
   }

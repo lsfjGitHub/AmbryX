@@ -16,10 +16,9 @@ package com.github.ambry.admin;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.rest.SecurityService;
+import java.util.Properties;
 import junit.framework.Assert;
 import org.junit.Test;
-
-import java.util.Properties;
 
 
 /**
@@ -32,11 +31,9 @@ public class AdminSecurityServiceFactoryTest {
    * @throws InstantiationException
    */
   @Test
-  public void getAdminSecurityServiceFactoryTest()
-      throws InstantiationException {
-    SecurityService securityService =
-        new AdminSecurityServiceFactory(new VerifiableProperties(new Properties()), new MetricRegistry())
-            .getSecurityService();
+  public void getAdminSecurityServiceFactoryTest() throws InstantiationException {
+    SecurityService securityService = new AdminSecurityServiceFactory(new VerifiableProperties(new Properties()),
+        new MetricRegistry()).getSecurityService();
     Assert.assertNotNull(securityService);
   }
 }

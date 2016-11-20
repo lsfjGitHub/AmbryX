@@ -23,14 +23,13 @@ import com.github.ambry.rest.RestServiceErrorCode;
 import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.router.ReadableStreamChannel;
+import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.util.List;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.util.List;
 
 
 /**
@@ -85,8 +84,7 @@ class GetReplicasHandler {
    * @throws RestServiceException if there were missing or invalid arguments or if there was a {@link JSONException}
    *                                or any other while building the response
    */
-  private JSONObject getReplicas(String blobId)
-      throws RestServiceException {
+  private JSONObject getReplicas(String blobId) throws RestServiceException {
     try {
       PartitionId partitionId = new BlobId(blobId, clusterMap).getPartition();
       if (partitionId == null) {
@@ -113,8 +111,7 @@ class GetReplicasHandler {
    * @return A {@link JSONObject} that wraps the replica list.
    * @throws JSONException if there was an error building the {@link JSONObject}.
    */
-  private static JSONObject packageResult(List<ReplicaId> replicaIds)
-      throws JSONException {
+  private static JSONObject packageResult(List<ReplicaId> replicaIds) throws JSONException {
     JSONObject result = new JSONObject();
     if (replicaIds != null) {
       for (ReplicaId replicaId : replicaIds) {

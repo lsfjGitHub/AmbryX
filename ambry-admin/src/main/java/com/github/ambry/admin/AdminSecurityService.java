@@ -16,12 +16,18 @@ package com.github.ambry.admin;
 import com.github.ambry.config.AdminConfig;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
-import com.github.ambry.rest.*;
+import com.github.ambry.rest.ResponseStatus;
+import com.github.ambry.rest.RestMethod;
+import com.github.ambry.rest.RestRequest;
+import com.github.ambry.rest.RestResponseChannel;
+import com.github.ambry.rest.RestServiceErrorCode;
+import com.github.ambry.rest.RestServiceException;
+import com.github.ambry.rest.RestUtils;
+import com.github.ambry.rest.SecurityService;
 import com.github.ambry.router.Callback;
 import com.github.ambry.router.FutureResult;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
-
 import java.util.Date;
 import java.util.GregorianCalendar;
 import java.util.concurrent.Future;
@@ -66,7 +72,7 @@ class AdminSecurityService implements SecurityService {
 
   @Override
   public Future<Void> processResponse(RestRequest restRequest, RestResponseChannel responseChannel, BlobInfo blobInfo,
-                                      Callback<Void> callback) {
+      Callback<Void> callback) {
     Exception exception = null;
     adminMetrics.securityServiceProcessResponseRate.mark();
     long startTimeMs = System.currentTimeMillis();
@@ -188,8 +194,8 @@ class AdminSecurityService implements SecurityService {
     } else {
       restResponseChannel.setHeader(RestUtils.Headers.EXPIRES,
           new Date(System.currentTimeMillis() + adminConfig.adminCacheValiditySeconds * Time.MsPerSec));
-      restResponseChannel
-          .setHeader(RestUtils.Headers.CACHE_CONTROL, "max-age=" + adminConfig.adminCacheValiditySeconds);
+      restResponseChannel.setHeader(RestUtils.Headers.CACHE_CONTROL,
+          "max-age=" + adminConfig.adminCacheValiditySeconds);
     }
   }
 

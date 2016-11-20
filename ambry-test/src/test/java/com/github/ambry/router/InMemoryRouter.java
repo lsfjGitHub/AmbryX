@@ -17,6 +17,7 @@ import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
 import com.github.ambry.notification.NotificationSystem;
+import com.github.ambry.protocol.GetOption;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Collections;
@@ -111,8 +112,7 @@ public class InMemoryRouter implements Router {
      * @return the blob content within the provided range, or the entire blob, if the range is null.
      * @throws RouterException if the range was non-null, but could not be resolved.
      */
-    public ByteBuffer getBlob(ByteRange range)
-        throws RouterException {
+    public ByteBuffer getBlob(ByteRange range) throws RouterException {
       ByteBuffer buf;
       if (range == null) {
         buf = getBlob();
@@ -146,7 +146,8 @@ public class InMemoryRouter implements Router {
           new RouterException("Cannot accept operation because blob ID is invalid", RouterErrorCode.InvalidBlobId));
     } else {
       try {
-        if (deletedBlobs.contains(blobId)) {
+        if (deletedBlobs.contains(blobId) && !options.getGetOption().equals(GetOption.Include_All)
+            && !options.getGetOption().equals(GetOption.Include_Deleted_Blobs)) {
           exception = new RouterException("Blob deleted", RouterErrorCode.BlobDeleted);
         } else if (!blobs.containsKey(blobId)) {
           exception = new RouterException("Blob not found", RouterErrorCode.BlobDoesNotExist);
@@ -209,7 +210,6 @@ public class InMemoryRouter implements Router {
       try {
         if (!deletedBlobs.contains(blobId) && blobs.containsKey(blobId)) {
           deletedBlobs.add(blobId);
-          blobs.remove(blobId);
           if (notificationSystem != null) {
             notificationSystem.onBlobDeleted(blobId);
           }
@@ -226,8 +226,7 @@ public class InMemoryRouter implements Router {
   }
 
   @Override
-  public void close()
-      throws IOException {
+  public void close() throws IOException {
     try {
       if (routerOpen.compareAndSet(true, false)) {
         operationPool.shutdown();
@@ -351,8 +350,7 @@ class InMemoryBlobPoster implements Runnable {
    * @return the blob data in a {@link ByteBuffer}.
    * @throws InterruptedException
    */
-  private ByteBuffer readBlob(ReadableStreamChannel postContent)
-      throws InterruptedException {
+  private ByteBuffer readBlob(ReadableStreamChannel postContent) throws InterruptedException {
     ByteBuffer blobData = ByteBuffer.allocate((int) postContent.getSize());
     ByteBufferAWC channel = new ByteBufferAWC();
     postContent.readInto(channel, new CloseWriteChannelCallback(channel));

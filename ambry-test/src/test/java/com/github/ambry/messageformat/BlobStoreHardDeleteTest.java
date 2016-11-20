@@ -13,12 +13,15 @@
  */
 package com.github.ambry.messageformat;
 
-import com.github.ambry.store.*;
+import com.github.ambry.store.HardDeleteInfo;
+import com.github.ambry.store.MessageInfo;
+import com.github.ambry.store.MessageReadSet;
+import com.github.ambry.store.MessageStoreHardDelete;
+import com.github.ambry.store.Read;
+import com.github.ambry.store.StoreKey;
+import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Utils;
-import org.junit.Assert;
-import org.junit.Test;
-
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.WritableByteChannel;
@@ -26,6 +29,8 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Random;
+import org.junit.Assert;
+import org.junit.Test;
 
 
 public class BlobStoreHardDeleteTest {
@@ -71,12 +76,8 @@ public class BlobStoreHardDeleteTest {
       MessageFormatInputStream msg5 =
           getPutMessage(keys[4], blobProperties, usermetadata, blob, BLOB_SIZE, blobVersions[4], blobTypes[4]);
 
-      buffer = ByteBuffer.allocate((int) (msg0.getSize() +
-          msg1.getSize() +
-          msg2.getSize() +
-          msg3d.getSize() +
-          msg4.getSize() +
-          msg5.getSize()));
+      buffer = ByteBuffer.allocate(
+          (int) (msg0.getSize() + msg1.getSize() + msg2.getSize() + msg3d.getSize() + msg4.getSize() + msg5.getSize()));
 
       ArrayList<Long> msgOffsets = new ArrayList<Long>();
       Long offset = 0L;
@@ -131,8 +132,7 @@ public class BlobStoreHardDeleteTest {
     }
 
     private MessageFormatInputStream getPutMessage(StoreKey key, BlobProperties blobProperties, byte[] usermetadata,
-                                                   byte[] blob, int blobSize, short blobVersion, BlobType blobType)
-        throws MessageFormatException {
+        byte[] blob, int blobSize, short blobVersion, BlobType blobType) throws MessageFormatException {
       if (blobVersion == MessageFormatRecord.Blob_Version_V2) {
         return new PutMessageFormatInputStream(key, blobProperties, ByteBuffer.wrap(usermetadata),
             new ByteBufferInputStream(ByteBuffer.wrap(blob)), blobSize, blobType);
@@ -142,8 +142,7 @@ public class BlobStoreHardDeleteTest {
       }
     }
 
-    private void writeToBuffer(MessageFormatInputStream stream, int sizeToWrite)
-        throws IOException {
+    private void writeToBuffer(MessageFormatInputStream stream, int sizeToWrite) throws IOException {
       long sizeWritten = 0;
       while (sizeWritten < sizeToWrite) {
         int read = stream.read(buffer.array(), buffer.position(), (int) sizeToWrite);
@@ -169,8 +168,7 @@ public class BlobStoreHardDeleteTest {
     }
 
     @Override
-    public void readInto(ByteBuffer bufferToWrite, long position)
-        throws IOException {
+    public void readInto(ByteBuffer bufferToWrite, long position) throws IOException {
       bufferToWrite.put(buffer.array(), (int) position, bufferToWrite.remaining());
     }
 
@@ -232,8 +230,7 @@ public class BlobStoreHardDeleteTest {
   }
 
   @Test
-  public void blobStoreHardDeleteTestBlobV1()
-      throws MessageFormatException, IOException {
+  public void blobStoreHardDeleteTestBlobV1() throws MessageFormatException, IOException {
     short[] blobVersions = new short[5];
     BlobType[] blobTypes = new BlobType[5];
     for (int i = 0; i < 5; i++) {
@@ -244,8 +241,7 @@ public class BlobStoreHardDeleteTest {
   }
 
   @Test
-  public void blobStoreHardDeleteTestBlobV2Simple()
-      throws MessageFormatException, IOException {
+  public void blobStoreHardDeleteTestBlobV2Simple() throws MessageFormatException, IOException {
     short[] blobVersions = new short[5];
     BlobType[] blobTypes = new BlobType[5];
     for (int i = 0; i < 5; i++) {
@@ -265,8 +261,7 @@ public class BlobStoreHardDeleteTest {
   }
 
   @Test
-  public void blobStoreHardDeleteTestBlobV2Mixed()
-      throws MessageFormatException, IOException {
+  public void blobStoreHardDeleteTestBlobV2Mixed() throws MessageFormatException, IOException {
 
     short[] blobVersions = new short[5];
     BlobType[] blobTypes = new BlobType[5];

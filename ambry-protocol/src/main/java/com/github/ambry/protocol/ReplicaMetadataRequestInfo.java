@@ -18,12 +18,11 @@ import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.store.FindToken;
 import com.github.ambry.store.FindTokenFactory;
 import com.github.ambry.utils.Utils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -54,8 +53,7 @@ public class ReplicaMetadataRequestInfo {
   }
 
   public static ReplicaMetadataRequestInfo readFrom(DataInputStream stream, ClusterMap clusterMap,
-                                                    FindTokenFactory factory)
-      throws IOException {
+      FindTokenFactory factory) throws IOException {
     String hostName = Utils.readIntString(stream);
     String replicaPath = Utils.readIntString(stream);
     PartitionId partitionId = clusterMap.getPartitionIdFromStream(stream);
@@ -73,9 +71,8 @@ public class ReplicaMetadataRequestInfo {
   }
 
   public long sizeInBytes() {
-    return HostName_Field_Size_In_Bytes + hostName.getBytes().length + ReplicaPath_Field_Size_In_Bytes + replicaPath
-        .getBytes().length +
-        +partitionId.getBytes().length + token.toBytes().length;
+    return HostName_Field_Size_In_Bytes + hostName.getBytes().length + ReplicaPath_Field_Size_In_Bytes
+        + replicaPath.getBytes().length + +partitionId.getBytes().length + token.toBytes().length;
   }
 
   public String toString() {

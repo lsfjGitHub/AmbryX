@@ -13,12 +13,15 @@
  */
 package com.github.ambry.rest;
 
-import com.codahale.metrics.*;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
+import com.codahale.metrics.Counter;
+import com.codahale.metrics.Gauge;
+import com.codahale.metrics.Histogram;
+import com.codahale.metrics.Meter;
+import com.codahale.metrics.MetricRegistry;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -62,7 +65,7 @@ public class AsyncRequestResponseHandlerFactory implements RestRequestHandlerFac
    * {@code blobStorageService} is null.
    */
   public AsyncRequestResponseHandlerFactory(Integer handlerCount, MetricRegistry metricRegistry,
-                                            BlobStorageService blobStorageService) {
+      BlobStorageService blobStorageService) {
     if (metricRegistry == null || blobStorageService == null) {
       throw new IllegalArgumentException("One or more arguments received is null");
     } else if (handlerCount <= 0) {
@@ -196,8 +199,8 @@ class RequestResponseHandlerMetrics {
     responsePreProcessingTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(AsyncResponseHandler.class, "ResponsePreProcessingTimeInMs"));
     // AsyncRequestResponseHandler
-    requestWorkerSelectionTimeInMs = metricRegistry
-        .histogram(MetricRegistry.name(AsyncRequestResponseHandler.class, "RequestWorkerSelectionTimeInMs"));
+    requestWorkerSelectionTimeInMs = metricRegistry.histogram(
+        MetricRegistry.name(AsyncRequestResponseHandler.class, "RequestWorkerSelectionTimeInMs"));
 
     // Errors
     // AsyncRequestWorker
@@ -227,8 +230,8 @@ class RequestResponseHandlerMetrics {
     responseHandlerCloseTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(AsyncResponseHandler.class, "CloseTimeInMs"));
     // AsyncRequestResponseHandler
-    requestWorkerShutdownTimeInMs = metricRegistry
-        .histogram(MetricRegistry.name(AsyncRequestResponseHandler.class, "RequestWorkerShutdownTimeInMs"));
+    requestWorkerShutdownTimeInMs = metricRegistry.histogram(
+        MetricRegistry.name(AsyncRequestResponseHandler.class, "RequestWorkerShutdownTimeInMs"));
     requestWorkerStartTimeInMs =
         metricRegistry.histogram(MetricRegistry.name(AsyncRequestResponseHandler.class, "RequestWorkerStartTimeInMs"));
     requestResponseHandlerShutdownTimeInMs =
@@ -277,8 +280,8 @@ class RequestResponseHandlerMetrics {
         return asyncRequestResponseHandler.getResponseSetSize();
       }
     };
-    metricRegistry
-        .register(MetricRegistry.name(AsyncRequestResponseHandler.class, "TotalResponseSetSize"), totalResponseSetSize);
+    metricRegistry.register(MetricRegistry.name(AsyncRequestResponseHandler.class, "TotalResponseSetSize"),
+        totalResponseSetSize);
 
     Gauge<Integer> asyncHandlerWorkersAlive = new Gauge<Integer>() {
       @Override

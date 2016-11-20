@@ -27,9 +27,6 @@ import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.protocol.RequestOrResponseType;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
@@ -39,6 +36,8 @@ import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -77,9 +76,8 @@ class NonBlockingRouter implements Router {
    * @throws IOException if the OperationController could not be successfully created.
    */
   NonBlockingRouter(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics,
-                    NetworkClientFactory networkClientFactory, NotificationSystem notificationSystem, ClusterMap clusterMap,
-                    Time time)
-      throws IOException {
+      NetworkClientFactory networkClientFactory, NotificationSystem notificationSystem, ClusterMap clusterMap,
+      Time time) throws IOException {
     this.routerConfig = routerConfig;
     this.routerMetrics = routerMetrics;
     this.networkClientFactory = networkClientFactory;
@@ -176,7 +174,7 @@ class NonBlockingRouter implements Router {
    */
   @Override
   public Future<String> putBlob(BlobProperties blobProperties, byte[] userMetadata, ReadableStreamChannel channel,
-                                Callback<String> callback) {
+      Callback<String> callback) {
     if (blobProperties == null || channel == null) {
       throw new IllegalArgumentException("blobProperties or channel must not be null");
     }
@@ -318,8 +316,7 @@ class NonBlockingRouter implements Router {
      * @param index the index of this OperationController in the NonBlockingRouter's list.
      * @throws IOException if the network components could not be created.
      */
-    OperationController(int index)
-        throws IOException {
+    OperationController(int index) throws IOException {
       networkClient = networkClientFactory.getNetworkClient();
       readyForPollCallback = new ReadyForPollCallback(networkClient);
       putManager = new PutManager(clusterMap, responseHandler, notificationSystem, routerConfig, routerMetrics,
@@ -343,7 +340,7 @@ class NonBlockingRouter implements Router {
      * @param callback The callback which will be invoked on the completion of the request.
      */
     private void getBlob(String blobId, GetBlobOptions options, FutureResult<GetBlobResult> futureResult,
-                         Callback<GetBlobResult> callback) {
+        Callback<GetBlobResult> callback) {
       getManager.submitGetBlobOperation(blobId, options, futureResult, callback);
       readyForPollCallback.onPollReady();
     }
@@ -357,7 +354,7 @@ class NonBlockingRouter implements Router {
      * @param callback The {@link Callback} which will be invoked on the completion of the request .
      */
     private void putBlob(BlobProperties blobProperties, byte[] userMetadata, ReadableStreamChannel channel,
-                         FutureResult<String> futureResult, Callback<String> callback) {
+        FutureResult<String> futureResult, Callback<String> callback) {
       if (!putManager.isOpen()) {
         RouterException routerException =
             new RouterException(" because Router is closed", RouterErrorCode.RouterClosed);
@@ -512,7 +509,7 @@ class OperationCompleteCallback {
    * @param <T> the type of the operation result, which depends on the kind of operation.
    */
   <T> void completeOperation(FutureResult<T> futureResult, Callback<T> callback, T operationResult,
-                             Exception exception) {
+      Exception exception) {
     operationsCount.decrementAndGet();
     try {
       futureResult.done(operationResult, exception);

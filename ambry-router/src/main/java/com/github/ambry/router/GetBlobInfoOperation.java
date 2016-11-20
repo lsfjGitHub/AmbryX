@@ -25,18 +25,16 @@ import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.RequestInfo;
 import com.github.ambry.network.ResponseInfo;
-import com.github.ambry.protocol.GetOptions;
 import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.utils.Time;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.TreeMap;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -66,10 +64,9 @@ class GetBlobInfoOperation extends GetOperation {
    * @throws RouterException if there is an error with any of the parameters, such as an invalid blob id.
    */
   GetBlobInfoOperation(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, ClusterMap clusterMap,
-                       ResponseHandler responseHandler, String blobIdStr, GetBlobOptions options,
-                       FutureResult<GetBlobResult> futureResult, Callback<GetBlobResult> callback,
-                       OperationCompleteCallback operationCompleteCallback, Time time)
-      throws RouterException {
+      ResponseHandler responseHandler, String blobIdStr, GetBlobOptions options,
+      FutureResult<GetBlobResult> futureResult, Callback<GetBlobResult> callback,
+      OperationCompleteCallback operationCompleteCallback, Time time) throws RouterException {
     super(routerConfig, routerMetrics, clusterMap, responseHandler, blobIdStr, options, futureResult, callback, time);
     this.operationCompleteCallback = operationCompleteCallback;
     operationTracker = new SimpleOperationTracker(routerConfig.routerDatacenterName, blobId.getPartition(),
@@ -138,7 +135,7 @@ class GetBlobInfoOperation extends GetOperation {
       ReplicaId replicaId = replicaIterator.next();
       String hostname = replicaId.getDataNodeId().getHostname();
       Port port = replicaId.getDataNodeId().getPortToConnectTo();
-      GetRequest getRequest = createGetRequest(blobId, getOperationFlag(), GetOptions.None);
+      GetRequest getRequest = createGetRequest(blobId, getOperationFlag(), options.getGetOption());
       RouterRequestInfo request = new RouterRequestInfo(hostname, port, getRequest, replicaId);
       int correlationId = getRequest.getCorrelationId();
       correlationIdToGetRequestInfo.put(correlationId, new GetRequestInfo(replicaId, time.milliseconds()));
@@ -173,8 +170,8 @@ class GetBlobInfoOperation extends GetOperation {
     }
     long requestLatencyMs = time.milliseconds() - getRequestInfo.startTimeMs;
     routerMetrics.routerRequestLatencyMs.update(requestLatencyMs);
-    routerMetrics.getDataNodeBasedMetrics(getRequestInfo.replicaId.getDataNodeId()).getBlobInfoRequestLatencyMs
-        .update(requestLatencyMs);
+    routerMetrics.getDataNodeBasedMetrics(getRequestInfo.replicaId.getDataNodeId()).getBlobInfoRequestLatencyMs.update(
+        requestLatencyMs);
     if (responseInfo.getError() != null) {
       setOperationException(new RouterException("Operation timed out", RouterErrorCode.OperationTimedOut));
       onErrorResponse(getRequestInfo.replicaId);
@@ -275,8 +272,7 @@ class GetBlobInfoOperation extends GetOperation {
    * @throws IOException if there is an IOException while deserializing the body.
    * @throws MessageFormatException if there is a MessageFormatException while deserializing the body.
    */
-  private void handleBody(InputStream payload)
-      throws IOException, MessageFormatException {
+  private void handleBody(InputStream payload) throws IOException, MessageFormatException {
     if (operationResult == null) {
       operationResult = new GetBlobResult(new BlobInfo(MessageFormatRecord.deserializeBlobProperties(payload),
           MessageFormatRecord.deserializeUserMetadata(payload).array()), null);

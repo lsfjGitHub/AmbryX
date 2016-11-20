@@ -27,12 +27,15 @@ import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Time;
+import java.io.DataInputStream;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.io.DataInputStream;
-import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
 
 
 /**
@@ -86,8 +89,8 @@ class GetManager {
    * @param time The {@link Time} instance to use.
    */
   GetManager(ClusterMap clusterMap, ResponseHandler responseHandler, RouterConfig routerConfig,
-             NonBlockingRouterMetrics routerMetrics, OperationCompleteCallback operationCompleteCallback,
-             ReadyForPollCallback readyForPollCallback, Time time) {
+      NonBlockingRouterMetrics routerMetrics, OperationCompleteCallback operationCompleteCallback,
+      ReadyForPollCallback readyForPollCallback, Time time) {
     this.clusterMap = clusterMap;
     blobIdFactory = new BlobIdFactory(clusterMap);
     this.responseHandler = responseHandler;
@@ -107,7 +110,7 @@ class GetManager {
    * @param callback The {@link Callback} object to be called on completion of the operation.
    */
   void submitGetBlobOperation(String blobId, GetBlobOptions options, FutureResult<GetBlobResult> futureResult,
-                              Callback<GetBlobResult> callback) {
+      Callback<GetBlobResult> callback) {
     try {
       GetOperation getOperation;
       if (options.getOperationType() == GetBlobOptions.OperationType.BlobInfo) {
@@ -203,8 +206,8 @@ class GetManager {
     NetworkClientErrorCode networkClientErrorCode = responseInfo.getError();
     if (networkClientErrorCode == null) {
       try {
-        getResponse = GetResponse
-            .readFrom(new DataInputStream(new ByteBufferInputStream(responseInfo.getResponse())), clusterMap);
+        getResponse = GetResponse.readFrom(new DataInputStream(new ByteBufferInputStream(responseInfo.getResponse())),
+            clusterMap);
         ServerErrorCode serverError = getResponse.getError();
         if (serverError == ServerErrorCode.No_Error) {
           serverError = getResponse.getPartitionResponseInfoList().get(0).getErrorCode();

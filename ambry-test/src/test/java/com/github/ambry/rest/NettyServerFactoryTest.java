@@ -15,9 +15,8 @@ package com.github.ambry.rest;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.VerifiableProperties;
-import org.junit.Test;
-
 import java.util.Properties;
+import org.junit.Test;
 
 import static org.junit.Assert.*;
 

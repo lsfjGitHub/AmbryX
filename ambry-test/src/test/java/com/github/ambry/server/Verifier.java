@@ -17,16 +17,19 @@ import com.github.ambry.clustermap.MockClusterMap;
 import com.github.ambry.clustermap.MockDataNodeId;
 import com.github.ambry.commons.BlobId;
 import com.github.ambry.commons.ServerErrorCode;
-import com.github.ambry.messageformat.*;
+import com.github.ambry.messageformat.BlobData;
+import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.messageformat.MessageFormatException;
+import com.github.ambry.messageformat.MessageFormatFlags;
+import com.github.ambry.messageformat.MessageFormatRecord;
 import com.github.ambry.network.ConnectedChannel;
 import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.network.Port;
 import com.github.ambry.network.PortType;
-import com.github.ambry.protocol.GetOptions;
+import com.github.ambry.protocol.GetOption;
 import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.PartitionRequestInfo;
-
 import java.io.DataInputStream;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
@@ -53,8 +56,8 @@ class Verifier implements Runnable {
   private MockNotificationSystem notificationSystem;
 
   public Verifier(BlockingQueue<Payload> payloadQueue, CountDownLatch completedLatch, AtomicInteger totalRequests,
-                  AtomicInteger requestsVerified, MockClusterMap clusterMap, AtomicBoolean cancelTest, PortType portType,
-                  ConnectionPool connectionPool, MockNotificationSystem notificationSystem) {
+      AtomicInteger requestsVerified, MockClusterMap clusterMap, AtomicBoolean cancelTest, PortType portType,
+      ConnectionPool connectionPool, MockNotificationSystem notificationSystem) {
     this.payloadQueue = payloadQueue;
     this.completedLatch = completedLatch;
     this.totalRequests = totalRequests;
@@ -87,7 +90,7 @@ class Verifier implements Runnable {
               partitionRequestInfoList.add(partitionRequestInfo);
               GetRequest getRequest =
                   new GetRequest(1, "clientid2", MessageFormatFlags.BlobProperties, partitionRequestInfoList,
-                      GetOptions.None);
+                      GetOption.None);
               channel1.send(getRequest);
               InputStream stream = channel1.receive().getInputStream();
               GetResponse resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
@@ -98,13 +101,15 @@ class Verifier implements Runnable {
                 try {
                   BlobProperties propertyOutput = MessageFormatRecord.deserializeBlobProperties(resp.getInputStream());
                   if (propertyOutput.getBlobSize() != payload.blobProperties.getBlobSize()) {
-                    System.out.println("blob size not matching " + " expected " +
-                        payload.blobProperties.getBlobSize() + " actual " + propertyOutput.getBlobSize());
+                    System.out.println(
+                        "blob size not matching " + " expected " + payload.blobProperties.getBlobSize() + " actual "
+                            + propertyOutput.getBlobSize());
                     throw new IllegalStateException();
                   }
                   if (!propertyOutput.getServiceId().equals(payload.blobProperties.getServiceId())) {
-                    System.out.println("service id not matching " + " expected " +
-                        payload.blobProperties.getServiceId() + " actual " + propertyOutput.getBlobSize());
+                    System.out.println(
+                        "service id not matching " + " expected " + payload.blobProperties.getServiceId() + " actual "
+                            + propertyOutput.getBlobSize());
                     throw new IllegalStateException();
                   }
                 } catch (MessageFormatException e) {
@@ -120,7 +125,7 @@ class Verifier implements Runnable {
               partitionRequestInfo = new PartitionRequestInfo(ids.get(0).getPartition(), ids);
               partitionRequestInfoList.add(partitionRequestInfo);
               getRequest = new GetRequest(1, "clientid2", MessageFormatFlags.BlobUserMetadata, partitionRequestInfoList,
-                  GetOptions.None);
+                  GetOption.None);
               channel1.send(getRequest);
               stream = channel1.receive().getInputStream();
               resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);
@@ -146,7 +151,7 @@ class Verifier implements Runnable {
               partitionRequestInfo = new PartitionRequestInfo(ids.get(0).getPartition(), ids);
               partitionRequestInfoList.add(partitionRequestInfo);
               getRequest =
-                  new GetRequest(1, "clientid2", MessageFormatFlags.Blob, partitionRequestInfoList, GetOptions.None);
+                  new GetRequest(1, "clientid2", MessageFormatFlags.Blob, partitionRequestInfoList, GetOption.None);
               channel1.send(getRequest);
               stream = channel1.receive().getInputStream();
               resp = GetResponse.readFrom(new DataInputStream(stream), clusterMap);

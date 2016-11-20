@@ -21,17 +21,16 @@ import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.config.RouterConfig;
 import com.github.ambry.messageformat.MessageFormatFlags;
 import com.github.ambry.network.ResponseInfo;
-import com.github.ambry.protocol.GetOptions;
+import com.github.ambry.protocol.GetOption;
 import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.PartitionRequestInfo;
 import com.github.ambry.utils.Time;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -67,8 +66,8 @@ abstract class GetOperation {
    * @throws RouterException if there is an error with any of the parameters, such as an invalid blob id.
    */
   GetOperation(RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics, ClusterMap clusterMap,
-               ResponseHandler responseHandler, String blobIdStr, GetBlobOptions options,
-               FutureResult<GetBlobResult> futureResult, Callback<GetBlobResult> operationCallback, Time time)
+      ResponseHandler responseHandler, String blobIdStr, GetBlobOptions options,
+      FutureResult<GetBlobResult> futureResult, Callback<GetBlobResult> operationCallback, Time time)
       throws RouterException {
     this.routerConfig = routerConfig;
     this.routerMetrics = routerMetrics;
@@ -184,12 +183,12 @@ abstract class GetOperation {
    * @param flag The {@link MessageFormatFlags} to be set with the GetRequest.
    * @return the created GetRequest.
    */
-  protected GetRequest createGetRequest(BlobId blobId, MessageFormatFlags flag, GetOptions getOptions) {
+  protected GetRequest createGetRequest(BlobId blobId, MessageFormatFlags flag, GetOption getOption) {
     List<BlobId> blobIds = Collections.singletonList(blobId);
     List<PartitionRequestInfo> partitionRequestInfoList =
         Collections.singletonList(new PartitionRequestInfo(blobId.getPartition(), blobIds));
     return new GetRequest(NonBlockingRouter.correlationIdGenerator.incrementAndGet(), routerConfig.routerHostname, flag,
-        partitionRequestInfoList, getOptions);
+        partitionRequestInfoList, getOption);
   }
 }
 

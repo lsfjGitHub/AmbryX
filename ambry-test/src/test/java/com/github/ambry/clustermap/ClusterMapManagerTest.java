@@ -16,16 +16,20 @@ package com.github.ambry.clustermap;
 import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.utils.ByteBufferInputStream;
+import java.io.DataInputStream;
+import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
+import java.util.Set;
 import junit.framework.Assert;
 import org.json.JSONException;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
-
-import java.io.DataInputStream;
-import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.util.*;
 
 import static org.junit.Assert.*;
 
@@ -35,7 +39,7 @@ import static org.junit.Assert.*;
  */
 public class ClusterMapManagerTest {
   @Rule
-  public TemporaryFolder folder = new TemporaryFolder();
+  public org.junit.rules.TemporaryFolder folder = new TemporaryFolder();
 
   // Useful for understanding partition layout affect on free capacity across all hardware.
   public String freeCapacityDump(ClusterMapManager clusterMapManager, HardwareLayout hardwareLayout) {
@@ -70,8 +74,7 @@ public class ClusterMapManagerTest {
   }
 
   @Test
-  public void clusterMapInterface()
-      throws JSONException {
+  public void clusterMapInterface() throws JSONException {
     // Exercise entire clusterMap interface
 
     TestUtils.TestHardwareLayout testHardwareLayout = new TestUtils.TestHardwareLayout("Alpha");
@@ -111,8 +114,7 @@ public class ClusterMapManagerTest {
   }
 
   @Test
-  public void findDatacenter()
-      throws JSONException {
+  public void findDatacenter() throws JSONException {
     TestUtils.TestHardwareLayout testHardwareLayout = new TestUtils.TestHardwareLayout("Alpha");
     TestUtils.TestPartitionLayout testPartitionLayout = new TestUtils.TestPartitionLayout(testHardwareLayout);
 
@@ -125,8 +127,7 @@ public class ClusterMapManagerTest {
   }
 
   @Test
-  public void addNewPartition()
-      throws JSONException {
+  public void addNewPartition() throws JSONException {
     TestUtils.TestHardwareLayout testHardwareLayout = new TestUtils.TestHardwareLayout("Alpha");
     PartitionLayout partitionLayout = new PartitionLayout(testHardwareLayout.getHardwareLayout());
 
@@ -142,8 +143,7 @@ public class ClusterMapManagerTest {
   }
 
   @Test
-  public void nonRackAwareAllocationTest()
-      throws JSONException, IOException {
+  public void nonRackAwareAllocationTest() throws JSONException, IOException {
     int replicaCountPerDataCenter = 2;
     long replicaCapacityInBytes = 100 * 1024 * 1024 * 1024L;
 
@@ -181,8 +181,7 @@ public class ClusterMapManagerTest {
   }
 
   @Test
-  public void rackAwareAllocationTest()
-      throws JSONException, IOException {
+  public void rackAwareAllocationTest() throws JSONException, IOException {
     int replicaCountPerDataCenter = 3;
     long replicaCapacityInBytes = 100 * 1024 * 1024 * 1024L;
 
@@ -215,8 +214,7 @@ public class ClusterMapManagerTest {
   }
 
   @Test
-  public void rackAwareOverAllocationTest()
-      throws JSONException, IOException {
+  public void rackAwareOverAllocationTest() throws JSONException, IOException {
     int replicaCountPerDataCenter = 4;
     long replicaCapacityInBytes = 100 * 1024 * 1024 * 1024L;
 
@@ -241,8 +239,7 @@ public class ClusterMapManagerTest {
   }
 
   @Test
-  public void capacities()
-      throws JSONException {
+  public void capacities() throws JSONException {
     TestUtils.TestHardwareLayout testHardwareLayout = new TestUtils.TestHardwareLayout("Alpha");
     PartitionLayout partitionLayout = new PartitionLayout(testHardwareLayout.getHardwareLayout());
 
@@ -291,8 +288,7 @@ public class ClusterMapManagerTest {
   }
 
   @Test
-  public void persistAndReadBack()
-      throws JSONException, IOException {
+  public void persistAndReadBack() throws JSONException, IOException {
     String tmpDir = folder.getRoot().getPath();
 
     String hardwareLayoutSer = tmpDir + "/hardwareLayoutSer.json";
@@ -316,8 +312,7 @@ public class ClusterMapManagerTest {
   }
 
   @Test
-  public void validateSimpleConfig()
-      throws JSONException, IOException {
+  public void validateSimpleConfig() throws JSONException, IOException {
     String configDir = System.getProperty("user.dir");
     // intelliJ and gradle return different values for user.dir: gradle includes the sub-project directory. To handle
     // this, we check the string suffix for the sub-project directory and append ".." to correctly set configDir.

@@ -18,23 +18,41 @@ import com.github.ambry.router.FutureResult;
 import com.github.ambry.utils.Utils;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
-import io.netty.channel.*;
-import io.netty.handler.codec.http.*;
+import io.netty.channel.ChannelFuture;
+import io.netty.channel.ChannelFutureListener;
+import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.ChannelProgressiveFuture;
+import io.netty.channel.ChannelProgressivePromise;
+import io.netty.channel.ChannelPromise;
+import io.netty.handler.codec.http.DefaultFullHttpResponse;
+import io.netty.handler.codec.http.DefaultHttpContent;
+import io.netty.handler.codec.http.DefaultHttpResponse;
+import io.netty.handler.codec.http.DefaultLastHttpContent;
+import io.netty.handler.codec.http.FullHttpResponse;
+import io.netty.handler.codec.http.HttpContent;
+import io.netty.handler.codec.http.HttpHeaders;
+import io.netty.handler.codec.http.HttpResponse;
+import io.netty.handler.codec.http.HttpResponseStatus;
+import io.netty.handler.codec.http.HttpVersion;
+import io.netty.handler.codec.http.LastHttpContent;
 import io.netty.handler.stream.ChunkedInput;
 import io.netty.handler.stream.ChunkedWriteHandler;
 import io.netty.util.concurrent.GenericFutureListener;
 import io.netty.util.concurrent.GenericProgressiveFutureListener;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.nio.charset.StandardCharsets;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.GregorianCalendar;
+import java.util.List;
+import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -48,7 +66,7 @@ import java.util.concurrent.atomic.AtomicLong;
  */
 class NettyResponseChannel implements RestResponseChannel {
   // Detailed message about an error in an error response.
-  static final String FAILURE_REASON_HEADER = "x-failure-reason";
+  static final String FAILURE_REASON_HEADER = "x-ambry-failure-reason";
   // add to this list if the connection needs to be closed on certain errors on GET, DELETE and HEAD.
   // for a POST, we always close the connection on error because we expect the channel to be in a bad state.
   static final List<HttpResponseStatus> CLOSE_CONNECTION_ERROR_STATUSES = new ArrayList<>();
@@ -119,8 +137,8 @@ class NettyResponseChannel implements RestResponseChannel {
         }
       }
       writeFuture.addListener(new CleanupCallback(exception));
-    } else if (HttpHeaders.isContentLengthSet(finalResponseMetadata) && totalBytesReceived.get() > HttpHeaders
-        .getContentLength(finalResponseMetadata)) {
+    } else if (HttpHeaders.isContentLengthSet(finalResponseMetadata)
+        && totalBytesReceived.get() > HttpHeaders.getContentLength(finalResponseMetadata)) {
       Exception exception = new IllegalStateException(
           "Size of provided content [" + totalBytesReceived.get() + "] is greater than Content-Length set ["
               + HttpHeaders.getContentLength(finalResponseMetadata) + "]");
@@ -208,8 +226,7 @@ class NettyResponseChannel implements RestResponseChannel {
   }
 
   @Override
-  public void setStatus(ResponseStatus status)
-      throws RestServiceException {
+  public void setStatus(ResponseStatus status) throws RestServiceException {
     responseMetadata.setStatus(getHttpResponseStatus(status));
     responseStatus = status;
     logger.trace("Set status to {} for response on channel {}", responseMetadata.getStatus(), ctx.channel());
@@ -221,8 +238,7 @@ class NettyResponseChannel implements RestResponseChannel {
   }
 
   @Override
-  public void setHeader(String headerName, Object headerValue)
-      throws RestServiceException {
+  public void setHeader(String headerName, Object headerValue) throws RestServiceException {
     setResponseHeader(headerName, headerValue);
   }
 
@@ -507,8 +523,8 @@ class NettyResponseChannel implements RestResponseChannel {
       onResponseComplete(exception);
       cleanupChunks(exception);
     } finally {
-      nettyMetrics.channelWriteFailureProcessingTimeInMs
-          .update(System.currentTimeMillis() - writeFailureProcessingStartTime);
+      nettyMetrics.channelWriteFailureProcessingTimeInMs.update(
+          System.currentTimeMillis() - writeFailureProcessingStartTime);
     }
   }
 
@@ -645,8 +661,8 @@ class NettyResponseChannel implements RestResponseChannel {
       nettyMetrics.channelWriteTimeInMs.update(chunkWriteTime);
       nettyMetrics.chunkResolutionProcessingTimeInMs.update(chunkResolutionProcessingTime);
       if (request != null) {
-        request.getMetricsTracker().nioMetricsTracker
-            .addToResponseProcessingTime(chunkWriteTime + chunkResolutionProcessingTime);
+        request.getMetricsTracker().nioMetricsTracker.addToResponseProcessingTime(
+            chunkWriteTime + chunkResolutionProcessingTime);
       }
     }
   }
@@ -733,8 +749,8 @@ class NettyResponseChannel implements RestResponseChannel {
     @Override
     public void operationProgressed(ChannelProgressiveFuture future, long progress, long total) {
       logger.trace("{} bytes of response written on channel {}", progress, ctx.channel());
-      while (chunksAwaitingCallback.peek() != null && progress >= chunksAwaitingCallback
-          .peek().writeCompleteThreshold) {
+      while (chunksAwaitingCallback.peek() != null
+          && progress >= chunksAwaitingCallback.peek().writeCompleteThreshold) {
         chunksAwaitingCallback.poll().resolveChunk(null);
       }
     }
@@ -791,8 +807,8 @@ class NettyResponseChannel implements RestResponseChannel {
       nettyMetrics.channelWriteTimeInMs.update(channelWriteTime);
       nettyMetrics.responseMetadataAfterWriteProcessingTimeInMs.update(responseAfterWriteProcessingTime);
       if (request != null) {
-        request.getMetricsTracker().nioMetricsTracker
-            .addToResponseProcessingTime(channelWriteTime + responseAfterWriteProcessingTime);
+        request.getMetricsTracker().nioMetricsTracker.addToResponseProcessingTime(
+            channelWriteTime + responseAfterWriteProcessingTime);
       }
     }
   }
@@ -804,8 +820,7 @@ class NettyResponseChannel implements RestResponseChannel {
     private final long responseWriteStartTime = System.currentTimeMillis();
 
     @Override
-    public void operationComplete(ChannelFuture future)
-        throws Exception {
+    public void operationComplete(ChannelFuture future) throws Exception {
       long writeFinishTime = System.currentTimeMillis();
       long channelWriteTime = writeFinishTime - responseWriteStartTime;
       if (future.isSuccess()) {
@@ -817,8 +832,8 @@ class NettyResponseChannel implements RestResponseChannel {
       nettyMetrics.channelWriteTimeInMs.update(channelWriteTime);
       nettyMetrics.responseMetadataAfterWriteProcessingTimeInMs.update(responseAfterWriteProcessingTime);
       if (request != null) {
-        request.getMetricsTracker().nioMetricsTracker
-            .addToResponseProcessingTime(channelWriteTime + responseAfterWriteProcessingTime);
+        request.getMetricsTracker().nioMetricsTracker.addToResponseProcessingTime(
+            channelWriteTime + responseAfterWriteProcessingTime);
       }
     }
   }
@@ -843,8 +858,7 @@ class NettyResponseChannel implements RestResponseChannel {
     }
 
     @Override
-    public void operationComplete(ChannelFuture future)
-        throws Exception {
+    public void operationComplete(ChannelFuture future) throws Exception {
       Throwable cause = future.cause() == null ? exception : future.cause();
       if (cause != null) {
         handleChannelWriteFailure(cause, false);

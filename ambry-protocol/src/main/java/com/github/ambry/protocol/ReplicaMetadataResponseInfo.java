@@ -19,7 +19,6 @@ import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.store.FindToken;
 import com.github.ambry.store.FindTokenFactory;
 import com.github.ambry.store.MessageInfo;
-
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -88,8 +87,7 @@ public class ReplicaMetadataResponseInfo {
   }
 
   public static ReplicaMetadataResponseInfo readFrom(DataInputStream stream, FindTokenFactory factory,
-                                                     ClusterMap clusterMap)
-      throws IOException {
+      ClusterMap clusterMap) throws IOException {
     PartitionId partitionId = clusterMap.getPartitionIdFromStream(stream);
     ServerErrorCode error = ServerErrorCode.values()[stream.readShort()];
     if (error != ServerErrorCode.No_Error) {
@@ -113,8 +111,8 @@ public class ReplicaMetadataResponseInfo {
   }
 
   public long sizeInBytes() {
-    return (token == null ? 0 : (token.toBytes().length + Remote_Replica_Lag_Size_In_Bytes + messageInfoListSize)) +
-        +partitionId.getBytes().length + Error_Size_InBytes;
+    return (token == null ? 0 : (token.toBytes().length + Remote_Replica_Lag_Size_In_Bytes + messageInfoListSize))
+        + +partitionId.getBytes().length + Error_Size_InBytes;
   }
 
   @Override

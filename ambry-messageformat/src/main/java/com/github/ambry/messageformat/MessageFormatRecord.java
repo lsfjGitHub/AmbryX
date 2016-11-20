@@ -19,15 +19,14 @@ import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Crc32;
 import com.github.ambry.utils.CrcInputStream;
 import com.github.ambry.utils.Utils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -88,8 +87,7 @@ public class MessageFormatRecord {
     }
   }
 
-  public static boolean deserializeDeleteRecord(InputStream stream)
-      throws IOException, MessageFormatException {
+  public static boolean deserializeDeleteRecord(InputStream stream) throws IOException, MessageFormatException {
     CrcInputStream crcStream = new CrcInputStream(stream);
     DataInputStream inputStream = new DataInputStream(crcStream);
     short version = inputStream.readShort();
@@ -111,8 +109,7 @@ public class MessageFormatRecord {
     }
   }
 
-  public static ByteBuffer deserializeUserMetadata(InputStream stream)
-      throws IOException, MessageFormatException {
+  public static ByteBuffer deserializeUserMetadata(InputStream stream) throws IOException, MessageFormatException {
     return deserializeAndGetUserMetadataWithVersion(stream).getUserMetadata();
   }
 
@@ -140,8 +137,7 @@ public class MessageFormatRecord {
     }
   }
 
-  public static BlobData deserializeBlob(InputStream stream)
-      throws IOException, MessageFormatException {
+  public static BlobData deserializeBlob(InputStream stream) throws IOException, MessageFormatException {
     return deserializeAndGetBlobWithVersion(stream).getBlobData();
   }
 
@@ -195,8 +191,7 @@ public class MessageFormatRecord {
    * @throws IOException
    * @throws MessageFormatException
    */
-  private static void validateHeader(InputStream stream)
-      throws IOException, MessageFormatException {
+  private static void validateHeader(InputStream stream) throws IOException, MessageFormatException {
     DataInputStream inputStream = new DataInputStream(stream);
     short headerVersion = inputStream.readShort();
     switch (headerVersion) {
@@ -270,7 +265,7 @@ public class MessageFormatRecord {
     }
 
     public static void serializeHeader(ByteBuffer outputBuffer, long totalSize, int blobPropertiesRecordRelativeOffset,
-                                       int deleteRecordRelativeOffset, int userMetadataRecordRelativeOffset, int blobRecordRelativeOffset)
+        int deleteRecordRelativeOffset, int userMetadataRecordRelativeOffset, int blobRecordRelativeOffset)
         throws MessageFormatException {
       checkHeaderConstraints(totalSize, blobPropertiesRecordRelativeOffset, deleteRecordRelativeOffset,
           userMetadataRecordRelativeOffset, blobRecordRelativeOffset);
@@ -363,15 +358,13 @@ public class MessageFormatRecord {
       return buffer.getLong(Crc_Field_Offset_In_Bytes);
     }
 
-    public void verifyHeader()
-        throws MessageFormatException {
+    public void verifyHeader() throws MessageFormatException {
       verifyCrc();
       checkHeaderConstraints(getMessageSize(), getBlobPropertiesRecordRelativeOffset(), getDeleteRecordRelativeOffset(),
           getUserMetadataRecordRelativeOffset(), getBlobRecordRelativeOffset());
     }
 
-    private void verifyCrc()
-        throws MessageFormatException {
+    private void verifyCrc() throws MessageFormatException {
       Crc32 crc = new Crc32();
       crc.update(buffer.array(), 0, buffer.limit() - Crc_Size);
       if (crc.getValue() != getCrc()) {
@@ -465,15 +458,14 @@ public class MessageFormatRecord {
       outputBuffer.putLong(crc.getValue());
     }
 
-    public static boolean deserializeDeleteRecord(CrcInputStream crcStream)
-        throws IOException, MessageFormatException {
+    public static boolean deserializeDeleteRecord(CrcInputStream crcStream) throws IOException, MessageFormatException {
       DataInputStream dataStream = new DataInputStream(crcStream);
       boolean isDeleted = dataStream.readByte() == 1 ? true : false;
       long actualCRC = crcStream.getValue();
       long expectedCRC = dataStream.readLong();
       if (actualCRC != expectedCRC) {
-        logger
-            .error("corrupt data while parsing delete record Expected CRC " + expectedCRC + " Actual CRC " + actualCRC);
+        logger.error(
+            "corrupt data while parsing delete record Expected CRC " + expectedCRC + " Actual CRC " + actualCRC);
         throw new MessageFormatException("delete record data is corrupt", MessageFormatErrorCodes.Data_Corrupt);
       }
       return isDeleted;
@@ -522,8 +514,8 @@ public class MessageFormatRecord {
       long actualCRC = crcStream.getValue();
       long expectedCRC = dataStream.readLong();
       if (actualCRC != expectedCRC) {
-        logger
-            .error("corrupt data while parsing user metadata Expected CRC " + expectedCRC + " Actual CRC " + actualCRC);
+        logger.error(
+            "corrupt data while parsing user metadata Expected CRC " + expectedCRC + " Actual CRC " + actualCRC);
         throw new MessageFormatException("User metadata is corrupt", MessageFormatErrorCodes.Data_Corrupt);
       }
       return ByteBuffer.wrap(userMetadaBuffer);
@@ -559,8 +551,7 @@ public class MessageFormatRecord {
       outputBuffer.putLong(blobSize);
     }
 
-    public static BlobData deserializeBlobRecord(CrcInputStream crcStream)
-        throws IOException, MessageFormatException {
+    public static BlobData deserializeBlobRecord(CrcInputStream crcStream) throws IOException, MessageFormatException {
       DataInputStream dataStream = new DataInputStream(crcStream);
       long dataSize = dataStream.readLong();
       if (dataSize > Integer.MAX_VALUE) {
@@ -611,8 +602,7 @@ public class MessageFormatRecord {
       outputBuffer.putLong(blobContentSize);
     }
 
-    public static BlobData deserializeBlobRecord(CrcInputStream crcStream)
-        throws IOException, MessageFormatException {
+    public static BlobData deserializeBlobRecord(CrcInputStream crcStream) throws IOException, MessageFormatException {
       DataInputStream dataStream = new DataInputStream(crcStream);
       short blobTypeOrdinal = dataStream.readShort();
       if (blobTypeOrdinal > BlobType.values().length) {
@@ -692,7 +682,7 @@ public class MessageFormatRecord {
      * @param totalSize The total size of the object this metadata describes.
      */
     public static void serializeMetadataContentRecord(ByteBuffer outputBuffer, int chunkSize, long totalSize,
-                                                      List<StoreKey> keys) {
+        List<StoreKey> keys) {
       if (chunkSize <= 0 || ((totalSize + chunkSize - 1) / chunkSize) != keys.size()) {
         throw new IllegalArgumentException("Invalid totalSize or chunkSize");
       }
@@ -717,8 +707,7 @@ public class MessageFormatRecord {
      * @throws MessageFormatException
      */
     public static CompositeBlobInfo deserializeMetadataContentRecord(DataInputStream stream,
-        StoreKeyFactory storeKeyFactory)
-        throws IOException, MessageFormatException {
+        StoreKeyFactory storeKeyFactory) throws IOException, MessageFormatException {
       List<StoreKey> keys = new ArrayList<StoreKey>();
       int chunkSize = stream.readInt();
       long totalSize = stream.readLong();

@@ -19,6 +19,7 @@ import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.commons.LoggingNotificationSystem;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.protocol.GetOption;
 import com.github.ambry.rest.NettyClient;
 import com.github.ambry.rest.RestServer;
 import com.github.ambry.rest.RestTestUtils;
@@ -29,8 +30,28 @@ import com.github.ambry.utils.Utils;
 import com.github.ambry.utils.UtilsTest;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
-import io.netty.handler.codec.http.*;
+import io.netty.handler.codec.http.DefaultFullHttpRequest;
+import io.netty.handler.codec.http.DefaultHttpHeaders;
+import io.netty.handler.codec.http.FullHttpRequest;
+import io.netty.handler.codec.http.HttpContent;
+import io.netty.handler.codec.http.HttpHeaders;
+import io.netty.handler.codec.http.HttpMethod;
+import io.netty.handler.codec.http.HttpObject;
+import io.netty.handler.codec.http.HttpResponse;
+import io.netty.handler.codec.http.HttpResponseStatus;
+import io.netty.handler.codec.http.HttpVersion;
+import io.netty.handler.codec.http.LastHttpContent;
 import io.netty.util.ReferenceCountUtil;
+import java.io.IOException;
+import java.nio.ByteBuffer;
+import java.util.Arrays;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
+import java.util.Queue;
+import java.util.concurrent.ExecutionException;
 import junit.framework.Assert;
 import org.json.JSONException;
 import org.junit.AfterClass;
@@ -38,11 +59,6 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
-
-import java.io.IOException;
-import java.nio.ByteBuffer;
-import java.util.*;
-import java.util.concurrent.ExecutionException;
 
 import static org.junit.Assert.*;
 
@@ -81,8 +97,7 @@ public class AdminIntegrationTest {
    * @throws Exception
    */
   @BeforeClass
-  public static void setup()
-      throws Exception {
+  public static void setup() throws Exception {
     adminRestServer = new RestServer(buildAdminVProps(), CLUSTER_MAP, new LoggingNotificationSystem());
     router = InMemoryRouterFactory.getLatestInstance();
     adminRestServer.start();
@@ -107,8 +122,7 @@ public class AdminIntegrationTest {
    * @throws Exception
    */
   @Test
-  public void getHeadDeleteTest()
-      throws Exception {
+  public void getHeadDeleteTest() throws Exception {
     doGetHeadDeleteTest(0, false);
     doGetHeadDeleteTest(0, true);
 
@@ -129,8 +143,7 @@ public class AdminIntegrationTest {
    * @throws IOException
    */
   @Test
-  public void healtCheckRequestTest()
-      throws ExecutionException, InterruptedException, IOException {
+  public void healtCheckRequestTest() throws ExecutionException, InterruptedException, IOException {
     FullHttpRequest httpRequest =
         new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.GET, "/healthCheck", Unpooled.buffer(0));
     Queue<HttpObject> responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
@@ -242,8 +255,7 @@ public class AdminIntegrationTest {
    * @param multipartPost {@code true} if multipart POST is desired, {@code false} otherwise.
    * @throws Exception
    */
-  private void doGetHeadDeleteTest(int contentSize, boolean multipartPost)
-      throws Exception {
+  private void doGetHeadDeleteTest(int contentSize, boolean multipartPost) throws Exception {
     ByteBuffer content = ByteBuffer.wrap(RestTestUtils.getRandomBytes(contentSize));
     String serviceId = "getHeadDeleteServiceID";
     String contentType = "application/octet-stream";
@@ -260,15 +272,15 @@ public class AdminIntegrationTest {
       headers.add(RestUtils.Headers.USER_META_DATA_HEADER_PREFIX + "key2", "value2");
     }
     blobId = putBlob(headers, content, usermetadata);
-    getBlobAndVerify(blobId, headers, content);
-    getNotModifiedBlobAndVerify(blobId);
-    getUserMetadataAndVerify(blobId, headers, usermetadata);
-    getBlobInfoAndVerify(blobId, headers, usermetadata);
-    getHeadAndVerify(blobId, headers);
+    getBlobAndVerify(blobId, null, headers, content);
+    getNotModifiedBlobAndVerify(blobId, null);
+    getUserMetadataAndVerify(blobId, null, headers, usermetadata);
+    getBlobInfoAndVerify(blobId, null, headers, usermetadata);
+    getHeadAndVerify(blobId, null, headers);
     deleteBlobAndVerify(blobId);
 
     // check GET, HEAD and DELETE after delete.
-    verifyOperationsAfterDelete(blobId);
+    verifyOperationsAfterDelete(blobId, headers, content, usermetadata);
   }
 
   /**
@@ -288,8 +300,7 @@ public class AdminIntegrationTest {
    * @throws org.json.JSONException
    */
   private void setAmbryHeaders(HttpHeaders httpHeaders, long contentLength, long ttlInSecs, boolean isPrivate,
-                               String serviceId, String contentType, String ownerId)
-      throws JSONException {
+      String serviceId, String contentType, String ownerId) throws JSONException {
     if (httpHeaders != null && contentLength >= 0 && ttlInSecs >= -1 && serviceId != null && contentType != null) {
       httpHeaders.add(RestUtils.Headers.BLOB_SIZE, contentLength);
       httpHeaders.add(RestUtils.Headers.TTL, ttlInSecs);
@@ -312,8 +323,7 @@ public class AdminIntegrationTest {
    * @return the blob ID of the blob.
    * @throws Exception
    */
-  private String putBlob(HttpHeaders headers, ByteBuffer content, byte[] usermetadata)
-      throws Exception {
+  private String putBlob(HttpHeaders headers, ByteBuffer content, byte[] usermetadata) throws Exception {
     Map<String, Object> args = new HashMap<>();
     for (Map.Entry<String, String> entry : headers.entries()) {
       args.put(entry.getKey(), entry.getValue());
@@ -332,14 +342,19 @@ public class AdminIntegrationTest {
   /**
    * Gets the blob with blob ID {@code blobId} and verifies that the headers and content match with what is expected.
    * @param blobId the blob ID of the blob to GET.
+   * @param getOption the options to use while getting the blob.
    * @param expectedHeaders the expected headers in the response.
    * @param expectedContent the expected content of the blob.
    * @throws ExecutionException
    * @throws InterruptedException
    */
-  private void getBlobAndVerify(String blobId, HttpHeaders expectedHeaders, ByteBuffer expectedContent)
-      throws ExecutionException, InterruptedException {
-    FullHttpRequest httpRequest = buildRequest(HttpMethod.GET, blobId, null, null);
+  private void getBlobAndVerify(String blobId, GetOption getOption, HttpHeaders expectedHeaders,
+      ByteBuffer expectedContent) throws ExecutionException, InterruptedException {
+    HttpHeaders headers = new DefaultHttpHeaders();
+    if (getOption != null) {
+      headers.add(RestUtils.Headers.GET_OPTION, getOption.toString());
+    }
+    FullHttpRequest httpRequest = buildRequest(HttpMethod.GET, blobId, headers, null);
     Queue<HttpObject> responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
     HttpResponse response = (HttpResponse) responseParts.poll();
     assertEquals("Unexpected response status", HttpResponseStatus.OK, response.getStatus());
@@ -356,11 +371,14 @@ public class AdminIntegrationTest {
   /**
    * Gets the blob with blob ID {@code blobId} and verifies that the blob is not returned as blob is not modified
    * @param blobId the blob ID of the blob to GET.
+   * @param getOption the options to use while getting the blob.
    * @throws Exception
    */
-  private void getNotModifiedBlobAndVerify(String blobId)
-      throws Exception {
+  private void getNotModifiedBlobAndVerify(String blobId, GetOption getOption) throws Exception {
     HttpHeaders headers = new DefaultHttpHeaders();
+    if (getOption != null) {
+      headers.add(RestUtils.Headers.GET_OPTION, getOption.toString());
+    }
     headers.add(RestUtils.Headers.IF_MODIFIED_SINCE, new Date());
     FullHttpRequest httpRequest = buildRequest(HttpMethod.GET, blobId, headers, null);
     Queue<HttpObject> responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
@@ -377,15 +395,20 @@ public class AdminIntegrationTest {
   /**
    * Gets the user metadata of the blob with blob ID {@code blobId} and verifies them against what is expected.
    * @param blobId the blob ID of the blob to HEAD.
+   * @param getOption the options to use while getting the blob.
    * @param expectedHeaders the expected headers in the response.
    * @param usermetadata if non-null, this is expected to come as the body.
    * @throws ExecutionException
    * @throws InterruptedException
    */
-  private void getUserMetadataAndVerify(String blobId, HttpHeaders expectedHeaders, byte[] usermetadata)
-      throws ExecutionException, InterruptedException {
+  private void getUserMetadataAndVerify(String blobId, GetOption getOption, HttpHeaders expectedHeaders,
+      byte[] usermetadata) throws ExecutionException, InterruptedException {
+    HttpHeaders headers = new DefaultHttpHeaders();
+    if (getOption != null) {
+      headers.add(RestUtils.Headers.GET_OPTION, getOption.toString());
+    }
     FullHttpRequest httpRequest =
-        buildRequest(HttpMethod.GET, blobId + "/" + RestUtils.SubResource.UserMetadata, null, null);
+        buildRequest(HttpMethod.GET, blobId + "/" + RestUtils.SubResource.UserMetadata, headers, null);
     Queue<HttpObject> responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
     HttpResponse response = (HttpResponse) responseParts.poll();
     assertEquals("Unexpected response status", HttpResponseStatus.OK, response.getStatus());
@@ -397,15 +420,20 @@ public class AdminIntegrationTest {
   /**
    * Gets the blob info of the blob with blob ID {@code blobId} and verifies them against what is expected.
    * @param blobId the blob ID of the blob to HEAD.
+   * @param getOption the options to use while getting the blob.
    * @param expectedHeaders the expected headers in the response.
    * @param usermetadata if non-null, this is expected to come as the body.
    * @throws ExecutionException
    * @throws InterruptedException
    */
-  private void getBlobInfoAndVerify(String blobId, HttpHeaders expectedHeaders, byte[] usermetadata)
-      throws ExecutionException, InterruptedException {
+  private void getBlobInfoAndVerify(String blobId, GetOption getOption, HttpHeaders expectedHeaders,
+      byte[] usermetadata) throws ExecutionException, InterruptedException {
+    HttpHeaders headers = new DefaultHttpHeaders();
+    if (getOption != null) {
+      headers.add(RestUtils.Headers.GET_OPTION, getOption.toString());
+    }
     FullHttpRequest httpRequest =
-        buildRequest(HttpMethod.GET, blobId + "/" + RestUtils.SubResource.BlobInfo, null, null);
+        buildRequest(HttpMethod.GET, blobId + "/" + RestUtils.SubResource.BlobInfo, headers, null);
     Queue<HttpObject> responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
     HttpResponse response = (HttpResponse) responseParts.poll();
     assertEquals("Unexpected response status", HttpResponseStatus.OK, response.getStatus());
@@ -418,13 +446,18 @@ public class AdminIntegrationTest {
   /**
    * Gets the headers of the blob with blob ID {@code blobId} and verifies them against what is expected.
    * @param blobId the blob ID of the blob to HEAD.
+   * @param getOption the options to use while getting the blob.
    * @param expectedHeaders the expected headers in the response.
    * @throws ExecutionException
    * @throws InterruptedException
    */
-  private void getHeadAndVerify(String blobId, HttpHeaders expectedHeaders)
+  private void getHeadAndVerify(String blobId, GetOption getOption, HttpHeaders expectedHeaders)
       throws ExecutionException, InterruptedException {
-    FullHttpRequest httpRequest = buildRequest(HttpMethod.HEAD, blobId, null, null);
+    HttpHeaders headers = new DefaultHttpHeaders();
+    if (getOption != null) {
+      headers.add(RestUtils.Headers.GET_OPTION, getOption.toString());
+    }
+    FullHttpRequest httpRequest = buildRequest(HttpMethod.HEAD, blobId, headers, null);
     Queue<HttpObject> responseParts = nettyClient.sendRequest(httpRequest, null, null).get();
     HttpResponse response = (HttpResponse) responseParts.poll();
     assertEquals("Unexpected response status", HttpResponseStatus.OK, response.getStatus());
@@ -504,8 +537,7 @@ public class AdminIntegrationTest {
    * @throws ExecutionException
    * @throws InterruptedException
    */
-  private void deleteBlobAndVerify(String blobId)
-      throws ExecutionException, InterruptedException {
+  private void deleteBlobAndVerify(String blobId) throws ExecutionException, InterruptedException {
     FullHttpRequest httpRequest = buildRequest(HttpMethod.DELETE, blobId, null, null);
     verifyDeleted(httpRequest, HttpResponseStatus.ACCEPTED);
   }
@@ -513,11 +545,13 @@ public class AdminIntegrationTest {
   /**
    * Verifies that the right response code is returned for GET, HEAD and DELETE once a blob is deleted.
    * @param blobId the ID of the blob that was deleted.
-   * @throws ExecutionException
-   * @throws InterruptedException
+   * @param expectedHeaders the expected headers in the response.
+   * @param expectedContent the expected content of the blob.
+   * @param usermetadata if non-null, this is expected to come as the body.
+   * @throws Exception
    */
-  private void verifyOperationsAfterDelete(String blobId)
-      throws ExecutionException, InterruptedException {
+  private void verifyOperationsAfterDelete(String blobId, HttpHeaders expectedHeaders, ByteBuffer expectedContent,
+      byte[] usermetadata) throws Exception {
     FullHttpRequest httpRequest = buildRequest(HttpMethod.GET, blobId, null, null);
     verifyDeleted(httpRequest, HttpResponseStatus.GONE);
 
@@ -526,6 +560,15 @@ public class AdminIntegrationTest {
 
     httpRequest = buildRequest(HttpMethod.DELETE, blobId, null, null);
     verifyDeleted(httpRequest, HttpResponseStatus.ACCEPTED);
+
+    GetOption[] options = {GetOption.Include_Deleted_Blobs, GetOption.Include_All};
+    for (GetOption option : options) {
+      getBlobAndVerify(blobId, option, expectedHeaders, expectedContent);
+      getNotModifiedBlobAndVerify(blobId, option);
+      getUserMetadataAndVerify(blobId, option, expectedHeaders, usermetadata);
+      getBlobInfoAndVerify(blobId, option, expectedHeaders, usermetadata);
+      getHeadAndVerify(blobId, option, expectedHeaders);
+    }
   }
 
   /**

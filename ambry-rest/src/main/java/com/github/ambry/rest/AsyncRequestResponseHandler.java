@@ -16,9 +16,6 @@ package com.github.ambry.rest;
 import com.github.ambry.router.Callback;
 import com.github.ambry.router.ReadableStreamChannel;
 import com.github.ambry.utils.Utils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.io.Closeable;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -31,6 +28,8 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -174,8 +173,7 @@ class AsyncRequestResponseHandler implements RestRequestHandler, RestResponseHan
    */
   @Override
   public void handleResponse(RestRequest restRequest, RestResponseChannel restResponseChannel,
-                             ReadableStreamChannel response, Exception exception)
-      throws RestServiceException {
+      ReadableStreamChannel response, Exception exception) throws RestServiceException {
     if (isRunning()) {
       asyncResponseHandler.submitResponse(restRequest, restResponseChannel, response, exception);
     } else {
@@ -336,8 +334,7 @@ class AsyncRequestWorker implements Runnable {
    * @return {@code true} if shutdown succeeded within the {@code timeout}. {@code false} otherwise.
    * @throws InterruptedException if the wait for shutdown is interrupted.
    */
-  protected boolean shutdown(long timeout, TimeUnit timeUnit)
-      throws InterruptedException {
+  protected boolean shutdown(long timeout, TimeUnit timeUnit) throws InterruptedException {
     logger.trace("Shutting down AsyncRequestWorker");
     running.set(false);
     requests.offer(new AsyncRequestInfo(null, null));
@@ -412,8 +409,7 @@ class AsyncRequestWorker implements Runnable {
    * @param asyncRequestInfo the currently dequeued {@link AsyncRequestInfo}.
    * @throws RestServiceException if the request cannot be prepared for hand-off to the {@link BlobStorageService}.
    */
-  private void processRequest(AsyncRequestInfo asyncRequestInfo)
-      throws RestServiceException {
+  private void processRequest(AsyncRequestInfo asyncRequestInfo) throws RestServiceException {
     long processingStartTime = System.currentTimeMillis();
     // needed to avoid double counting.
     long blobStorageProcessingTime = 0;
@@ -446,8 +442,8 @@ class AsyncRequestWorker implements Runnable {
       }
       blobStorageProcessingTime = System.currentTimeMillis() - blobStorageProcessingStartTime;
     } finally {
-      restRequest.getMetricsTracker().scalingMetricsTracker
-          .addToRequestProcessingTime(System.currentTimeMillis() - processingStartTime - blobStorageProcessingTime);
+      restRequest.getMetricsTracker().scalingMetricsTracker.addToRequestProcessingTime(
+          System.currentTimeMillis() - processingStartTime - blobStorageProcessingTime);
     }
   }
 
@@ -480,7 +476,7 @@ class AsyncRequestWorker implements Runnable {
    * @param exception any {@link Exception} that occurred during response construction.
    */
   private void onProcessingFailure(RestRequest restRequest, RestResponseChannel restResponseChannel,
-                                   Exception exception) {
+      Exception exception) {
     try {
       restRequest.getMetricsTracker().scalingMetricsTracker.markRequestCompleted();
       restResponseChannel.onResponseComplete(exception);
@@ -566,8 +562,7 @@ class AsyncResponseHandler implements Closeable {
    * @throws RestServiceException if there is any error while processing the response.
    */
   protected void submitResponse(RestRequest restRequest, RestResponseChannel restResponseChannel,
-                                ReadableStreamChannel response, Exception exception)
-      throws RestServiceException {
+      ReadableStreamChannel response, Exception exception) throws RestServiceException {
     long processingStartTime = System.currentTimeMillis();
     if (restRequest == null || restResponseChannel == null) {
       throw new IllegalArgumentException("Received one or more null arguments");
@@ -636,7 +631,7 @@ class AsyncResponseHandler implements Closeable {
    * @param exception if the response could not be constructed, the reason for the failure.
    */
   private void onResponseComplete(RestRequest restRequest, RestResponseChannel restResponseChannel,
-                                  ReadableStreamChannel response, Exception exception) {
+      ReadableStreamChannel response, Exception exception) {
     try {
       if (exception != null) {
         metrics.responseExceptionCount.inc();
@@ -687,7 +682,7 @@ class AsyncResponseHandler implements Closeable {
      * @param restResponseChannel the {@link RestResponseChannel} to use to send the response to the client.
      */
     public ResponseWriteCallback(RestRequest restRequest, ReadableStreamChannel response,
-                                 RestResponseChannel restResponseChannel) {
+        RestResponseChannel restResponseChannel) {
       this.restRequest = restRequest;
       this.response = response;
       this.restResponseChannel = restResponseChannel;

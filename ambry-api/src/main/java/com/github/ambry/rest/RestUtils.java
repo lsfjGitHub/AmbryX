@@ -14,6 +14,7 @@
 package com.github.ambry.rest;
 
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.protocol.GetOption;
 import com.github.ambry.router.ByteRange;
 import com.github.ambry.router.GetBlobOptions;
 import com.github.ambry.utils.Crc32;
@@ -114,6 +115,11 @@ public class RestUtils {
      */
     public final static String OWNER_ID = "x-ambry-owner-id";
     /**
+     * optional in request; defines an option while getting the blob and is optional support in a
+     * {@link BlobStorageService}. Valid values are available in {@link GetOption}. Defaults to {@link GetOption#None}
+     */
+    public final static String GET_OPTION = "x-ambry-get-option";
+    /**
      * not allowed  in request. Allowed in response only; string; time at which blob was created.
      */
     public final static String CREATION_TIME = "x-ambry-creation-time";
@@ -175,8 +181,7 @@ public class RestUtils {
    * @throws RestServiceException if required arguments aren't present or if they aren't in the format or number
    *                                    expected.
    */
-  public static BlobProperties buildBlobProperties(Map<String, Object> args)
-      throws RestServiceException {
+  public static BlobProperties buildBlobProperties(Map<String, Object> args) throws RestServiceException {
     String blobSizeStr = getHeader(args, Headers.BLOB_SIZE, true);
     long blobSize;
     try {
@@ -259,8 +264,7 @@ public class RestUtils {
    * @return the user metadata extracted from arguments.
    * @throws RestServiceException if usermetadata arguments have null values.
    */
-  public static byte[] buildUsermetadata(Map<String, Object> args)
-      throws RestServiceException {
+  public static byte[] buildUsermetadata(Map<String, Object> args) throws RestServiceException {
     ByteBuffer userMetadata;
     if (args.containsKey(MultipartPost.USER_METADATA_PART)) {
       userMetadata = (ByteBuffer) args.get(MultipartPost.USER_METADATA_PART);
@@ -316,8 +320,7 @@ public class RestUtils {
    * @return the user metadata that is read from the byte array, or {@code null} if the {@code userMetadata} cannot be
    * parsed in expected format
    */
-  public static Map<String, String> buildUserMetadata(byte[] userMetadata)
-      throws RestServiceException {
+  public static Map<String, String> buildUserMetadata(byte[] userMetadata) throws RestServiceException {
     Map<String, String> toReturn = null;
     if (userMetadata.length > 0) {
       try {
@@ -366,17 +369,18 @@ public class RestUtils {
    * @param args the arguments associated with the request. This is typically a map of header names and query string
    *             arguments to values.
    * @param subResource the {@link SubResource} for the request, or {@code null} if no sub-resource is requested.
+   * @param getOption the {@link GetOption} required.
    * @return a populated {@link GetBlobOptions} object.
    * @throws RestServiceException if the {@link GetBlobOptions} could not be constructed.
    */
-  public static GetBlobOptions buildGetBlobOptions(Map<String, Object> args, SubResource subResource)
-      throws RestServiceException {
+  public static GetBlobOptions buildGetBlobOptions(Map<String, Object> args, SubResource subResource,
+      GetOption getOption) throws RestServiceException {
     String rangeHeaderValue = getHeader(args, Headers.RANGE, false);
     if (subResource != null && rangeHeaderValue != null) {
       throw new RestServiceException("Ranges not supported for sub-resources.", RestServiceErrorCode.InvalidArgs);
     }
     return new GetBlobOptions(
-        subResource == null ? GetBlobOptions.OperationType.All : GetBlobOptions.OperationType.BlobInfo,
+        subResource == null ? GetBlobOptions.OperationType.All : GetBlobOptions.OperationType.BlobInfo, getOption,
         rangeHeaderValue != null ? RestUtils.buildByteRange(rangeHeaderValue) : null);
   }
 
@@ -405,12 +409,12 @@ public class RestUtils {
    * Looks at the URI to determine the type of operation required or the blob ID that an operation needs to be
    * performed on.
    * @param restRequest {@link RestRequest} containing metadata about the request.
-   * @param subResource the {@link SubResource} if one is present. {@code null} otherwise.
+   * @param subResource the {@link RestUtils.SubResource} if one is present. {@code null} otherwise.
    * @param prefixesToRemove the list of prefixes that need to be removed from the URI before extraction. Removal of
    *                         prefixes earlier in the list will be preferred to removal of the ones later in the list.
    * @return extracted operation type or blob ID from the URI.
    */
-  public static String getOperationOrBlobIdFromUri(RestRequest restRequest, SubResource subResource,
+  public static String getOperationOrBlobIdFromUri(RestRequest restRequest, RestUtils.SubResource subResource,
       List<String> prefixesToRemove) {
     String path = restRequest.getPath();
     int startIndex = 0;
@@ -444,14 +448,14 @@ public class RestUtils {
    * @param restRequest {@link RestRequest} containing metadata about the request.
    * @return sub-resource if the URI includes one; null otherwise.
    */
-  public static SubResource getBlobSubResource(RestRequest restRequest) {
+  public static RestUtils.SubResource getBlobSubResource(RestRequest restRequest) {
     String path = restRequest.getPath();
     final int minSegmentsRequired = path.startsWith("/") ? 3 : 2;
     String[] segments = path.split("/");
-    SubResource subResource = null;
+    RestUtils.SubResource subResource = null;
     if (segments.length >= minSegmentsRequired) {
       try {
-        subResource = SubResource.valueOf(segments[segments.length - 1]);
+        subResource = RestUtils.SubResource.valueOf(segments[segments.length - 1]);
       } catch (IllegalArgumentException e) {
         // nothing to do.
       }
@@ -485,6 +489,34 @@ public class RestUtils {
    */
   public static long toSecondsPrecisionInMs(long ms) {
     return ms - (ms % 1000);
+  }
+
+  /**
+   * Gets the {@link GetOption} required by the request.
+   * @param restRequest the representation of the request.
+   * @return the required {@link GetOption}. Defaults to {@link GetOption#None}.
+   * @throws RestServiceException if the {@link RestUtils.Headers#GET_OPTION} is present but not recognized.
+   */
+  public static GetOption getGetOption(RestRequest restRequest) throws RestServiceException {
+    GetOption options = GetOption.None;
+    Map<String, Object> args = restRequest.getArgs();
+    Object value = args.get(RestUtils.Headers.GET_OPTION);
+    if (value != null) {
+      String str = (String) value;
+      boolean foundMatch = false;
+      for (GetOption getOption : GetOption.values()) {
+        if (str.equalsIgnoreCase(getOption.name())) {
+          options = getOption;
+          foundMatch = true;
+          break;
+        }
+      }
+      if (!foundMatch) {
+        throw new RestServiceException("Unrecognized value for [" + RestUtils.Headers.GET_OPTION + "]: " + str,
+            RestServiceErrorCode.InvalidArgs);
+      }
+    }
+    return options;
   }
 
   /**
@@ -530,8 +562,7 @@ public class RestUtils {
    * @throws RestServiceException if no range header was found, or if a valid range could not be parsed from the header
    *                              value,
    */
-  private static ByteRange buildByteRange(String rangeHeaderValue)
-      throws RestServiceException {
+  private static ByteRange buildByteRange(String rangeHeaderValue) throws RestServiceException {
     if (!rangeHeaderValue.startsWith(BYTE_RANGE_PREFIX)) {
       throw new RestServiceException("Invalid byte range syntax; does not start with '" + BYTE_RANGE_PREFIX + "'",
           RestServiceErrorCode.InvalidArgs);

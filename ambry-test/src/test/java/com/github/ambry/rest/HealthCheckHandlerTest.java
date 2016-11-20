@@ -15,13 +15,17 @@ package com.github.ambry.rest;
 
 import com.codahale.metrics.MetricRegistry;
 import io.netty.channel.embedded.EmbeddedChannel;
-import io.netty.handler.codec.http.*;
+import io.netty.handler.codec.http.DefaultLastHttpContent;
+import io.netty.handler.codec.http.FullHttpResponse;
+import io.netty.handler.codec.http.HttpHeaders;
+import io.netty.handler.codec.http.HttpMethod;
+import io.netty.handler.codec.http.HttpRequest;
+import io.netty.handler.codec.http.HttpResponseStatus;
+import java.io.IOException;
 import junit.framework.Assert;
 import org.junit.Test;
 
-import java.io.IOException;
-
-import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.*;
 
 
 public class HealthCheckHandlerTest {
@@ -39,8 +43,7 @@ public class HealthCheckHandlerTest {
    * @throws java.io.IOException
    */
   @Test
-  public void requestHandleWithHealthCheckRequestTest()
-      throws IOException {
+  public void requestHandleWithHealthCheckRequestTest() throws IOException {
     // test with keep alive
     testHealthCheckRequest(HttpMethod.GET, true, true);
     testHealthCheckRequest(HttpMethod.GET, false, true);
@@ -55,8 +58,7 @@ public class HealthCheckHandlerTest {
    * @throws java.io.IOException
    */
   @Test
-  public void requestHandleWithNonHealthCheckRequestTest()
-      throws IOException {
+  public void requestHandleWithNonHealthCheckRequestTest() throws IOException {
     testNonHealthCheckRequest(HttpMethod.POST, "POST");
     testNonHealthCheckRequest(HttpMethod.GET, "GET");
     testNonHealthCheckRequest(HttpMethod.DELETE, "DELETE");
@@ -100,8 +102,7 @@ public class HealthCheckHandlerTest {
    * @param uri Uri to be used during the request
    * @throws IOException
    */
-  private void testNonHealthCheckRequest(HttpMethod httpMethod, String uri)
-      throws IOException {
+  private void testNonHealthCheckRequest(HttpMethod httpMethod, String uri) throws IOException {
     EmbeddedChannel channel = createChannel();
     HttpRequest request = RestTestUtils.createRequest(httpMethod, uri, null);
     FullHttpResponse response = sendRequestAndGetResponse(channel, request);

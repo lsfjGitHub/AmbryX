@@ -21,12 +21,11 @@ import io.netty.channel.socket.SocketChannel;
 import io.netty.handler.codec.http.HttpServerCodec;
 import io.netty.handler.stream.ChunkedWriteHandler;
 import io.netty.handler.timeout.IdleStateHandler;
-import org.junit.Test;
-
 import java.io.IOException;
 import java.util.Properties;
+import org.junit.Test;
 
-import static org.junit.Assert.fail;
+import static org.junit.Assert.*;
 
 
 /**
@@ -40,8 +39,7 @@ public class NettyServerTest {
    * @throws IOException
    */
   @Test
-  public void startShutdownTest()
-      throws InstantiationException, IOException {
+  public void startShutdownTest() throws InstantiationException, IOException {
     NioServer nioServer = getNettyServer(null);
     nioServer.start();
     nioServer.shutdown();
@@ -55,8 +53,7 @@ public class NettyServerTest {
    * @throws IOException
    */
   @Test
-  public void shutdownWithoutStartTest()
-      throws InstantiationException, IOException {
+  public void shutdownWithoutStartTest() throws InstantiationException, IOException {
     NioServer nioServer = getNettyServer(null);
     nioServer.shutdown();
   }
@@ -68,8 +65,7 @@ public class NettyServerTest {
    * @throws IOException
    */
   @Test
-  public void startWithBadInputTest()
-      throws InstantiationException, IOException {
+  public void startWithBadInputTest() throws InstantiationException, IOException {
     Properties properties = new Properties();
     // Should be int. So will throw at instantiation.
     properties.setProperty("netty.server.port", "abcd");
@@ -110,8 +106,7 @@ public class NettyServerTest {
    * @throws InstantiationException
    * @throws IOException
    */
-  private NettyServer getNettyServer(Properties properties)
-      throws InstantiationException, IOException {
+  private NettyServer getNettyServer(Properties properties) throws InstantiationException, IOException {
     if (properties == null) {
       // dud properties. should pick up defaults
       properties = new Properties();
@@ -129,18 +124,18 @@ public class NettyServerTest {
         ch.pipeline()
             // connection stats handler to track connection related metrics
             .addLast("ConnectionStatsHandler", connectionStatsHandler)
-                // for http encoding/decoding. Note that we get content in 8KB chunks and a change to that number has
-                // to go here.
+            // for http encoding/decoding. Note that we get content in 8KB chunks and a change to that number has
+            // to go here.
             .addLast("codec", new HttpServerCodec())
-                // for health check request handling
+            // for health check request handling
             .addLast("healthCheckHandler", new HealthCheckHandler(restServerState, nettyMetrics))
-                // for public access logging
+            // for public access logging
             .addLast("publicAccessLogHandler", new PublicAccessLogHandler(publicAccessLogger, nettyMetrics))
-                // for detecting connections that have been idle too long - probably because of an error.
+            // for detecting connections that have been idle too long - probably because of an error.
             .addLast("idleStateHandler", new IdleStateHandler(0, 0, nettyConfig.nettyServerIdleTimeSeconds))
-                // for safe writing of chunks for responses
+            // for safe writing of chunks for responses
             .addLast("chunker", new ChunkedWriteHandler())
-                // custom processing class that interfaces with a BlobStorageService.
+            // custom processing class that interfaces with a BlobStorageService.
             .addLast("processor", new NettyMessageProcessor(nettyMetrics, nettyConfig, requestHandler));
       }
     });

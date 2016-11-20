@@ -16,16 +16,19 @@ package com.github.ambry.rest;
 import com.github.ambry.config.NettyConfig;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
-import io.netty.handler.codec.http.*;
+import io.netty.handler.codec.http.HttpContent;
+import io.netty.handler.codec.http.HttpMethod;
+import io.netty.handler.codec.http.HttpObject;
+import io.netty.handler.codec.http.HttpRequest;
+import io.netty.handler.codec.http.LastHttpContent;
 import io.netty.handler.codec.http.multipart.HttpPostRequestDecoder;
 import io.netty.handler.timeout.IdleState;
 import io.netty.handler.timeout.IdleStateEvent;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.io.IOException;
 import java.nio.channels.ClosedChannelException;
 import java.util.concurrent.atomic.AtomicBoolean;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -138,8 +141,7 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
    * @throws Exception if there is an {@link Exception} while handling the {@code cause} caught.
    */
   @Override
-  public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause)
-      throws Exception {
+  public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) throws Exception {
     try {
       if (request != null && request.isOpen() && cause instanceof Exception) {
         nettyMetrics.processorExceptionCaughtCount.inc();
@@ -212,8 +214,7 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
    * @throws RestServiceException if there is an error handling the processing of the current {@link HttpObject}.
    */
   @Override
-  public void channelRead0(ChannelHandlerContext ctx, HttpObject obj)
-      throws RestServiceException {
+  public void channelRead0(ChannelHandlerContext ctx, HttpObject obj) throws RestServiceException {
     if (isOpen()) {
       logger.trace("Reading on channel {}", ctx.channel());
       long currentTime = System.currentTimeMillis();
@@ -260,8 +261,7 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
    * @return {@code true} if the handling succeeded without problems.
    * @throws RestServiceException if there is an error handling the current {@link HttpRequest}.
    */
-  private boolean handleRequest(HttpRequest httpRequest)
-      throws RestServiceException {
+  private boolean handleRequest(HttpRequest httpRequest) throws RestServiceException {
     boolean success = true;
     if (responseChannel == null || requestContentFullyReceived) {
       // Once all content associated with a request has been received, this channel is clear to receive new requests.
@@ -303,8 +303,8 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
           onRequestAborted(e);
         } finally {
           if (request != null) {
-            request.getMetricsTracker().nioMetricsTracker
-                .addToRequestProcessingTime(System.currentTimeMillis() - processingStartTime);
+            request.getMetricsTracker().nioMetricsTracker.addToRequestProcessingTime(
+                System.currentTimeMillis() - processingStartTime);
           }
         }
       }
@@ -332,8 +332,7 @@ public class NettyMessageProcessor extends SimpleChannelInboundHandler<HttpObjec
    * @return {@code true} if the handling succeeded without problems.
    * @throws RestServiceException if there is an error handling the current {@link HttpContent}.
    */
-  private boolean handleContent(HttpContent httpContent)
-      throws RestServiceException {
+  private boolean handleContent(HttpContent httpContent) throws RestServiceException {
     boolean success = true;
     if (request != null && !requestContentFullyReceived) {
       long processingStartTime = System.currentTimeMillis();

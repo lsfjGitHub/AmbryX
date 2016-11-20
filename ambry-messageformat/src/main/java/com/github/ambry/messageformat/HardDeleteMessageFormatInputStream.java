@@ -16,7 +16,6 @@ package com.github.ambry.messageformat;
 import com.github.ambry.utils.Crc32;
 import com.github.ambry.utils.CrcInputStream;
 import com.github.ambry.utils.ZeroBytesInputStream;
-
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
@@ -57,7 +56,7 @@ public class HardDeleteMessageFormatInputStream extends MessageFormatInputStream
    * @throws IOException
    */
   public HardDeleteMessageFormatInputStream(int userMetadataRelativeOffset, short userMetadataVersion,
-                                            int userMetadataSize, short blobRecordVersion, BlobType blobType, long blobStreamSize)
+      int userMetadataSize, short blobRecordVersion, BlobType blobType, long blobStreamSize)
       throws MessageFormatException, IOException {
 
     ByteBuffer userMetadata = ByteBuffer.allocate(userMetadataSize);
@@ -93,8 +92,8 @@ public class HardDeleteMessageFormatInputStream extends MessageFormatInputStream
         blobRecordSize = MessageFormatRecord.Blob_Format_V2.getBlobRecordSize(blobStreamSize);
         serializedBlobPartialRecord =
             ByteBuffer.allocate((int) (blobRecordSize - blobStreamSize - MessageFormatRecord.Crc_Size));
-        MessageFormatRecord.Blob_Format_V2
-            .serializePartialBlobRecord(serializedBlobPartialRecord, blobStreamSize, blobType);
+        MessageFormatRecord.Blob_Format_V2.serializePartialBlobRecord(serializedBlobPartialRecord, blobStreamSize,
+            blobType);
         serializedBlobPartialRecord.flip();
         break;
       default:
@@ -102,8 +101,8 @@ public class HardDeleteMessageFormatInputStream extends MessageFormatInputStream
             MessageFormatErrorCodes.Unknown_Format_Version);
     }
 
-    buffer = ByteBuffer
-        .allocate(userMetadataRecordSize + (int) (blobRecordSize - blobStreamSize - MessageFormatRecord.Crc_Size));
+    buffer = ByteBuffer.allocate(
+        userMetadataRecordSize + (int) (blobRecordSize - blobStreamSize - MessageFormatRecord.Crc_Size));
 
     buffer.put(serializedUserMetadata);
     int bufferBlobStart = buffer.position();

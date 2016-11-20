@@ -14,7 +14,6 @@
 package com.github.ambry.messageformat;
 
 import com.github.ambry.utils.Crc32;
-
 import java.nio.ByteBuffer;
 import java.util.Random;
 

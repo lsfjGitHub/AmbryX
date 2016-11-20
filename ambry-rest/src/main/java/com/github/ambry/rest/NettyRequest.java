@@ -17,23 +17,34 @@ import com.github.ambry.router.AsyncWritableChannel;
 import com.github.ambry.router.Callback;
 import com.github.ambry.router.FutureResult;
 import io.netty.channel.Channel;
-import io.netty.handler.codec.http.*;
+import io.netty.handler.codec.http.CookieDecoder;
+import io.netty.handler.codec.http.HttpContent;
+import io.netty.handler.codec.http.HttpHeaders;
+import io.netty.handler.codec.http.HttpMethod;
+import io.netty.handler.codec.http.HttpRequest;
+import io.netty.handler.codec.http.LastHttpContent;
+import io.netty.handler.codec.http.QueryStringDecoder;
 import io.netty.handler.codec.http.multipart.HttpPostRequestDecoder;
 import io.netty.util.ReferenceCountUtil;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import javax.servlet.http.Cookie;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.util.*;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Queue;
+import java.util.Set;
+import java.util.TreeMap;
 import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantLock;
+import javax.servlet.http.Cookie;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -95,8 +106,7 @@ class NettyRequest implements RestRequest {
    * @throws RestServiceException if the {@link HttpMethod} defined in {@code request} is not recognized as a
    *                                {@link RestMethod} or if the {@link RestUtils.Headers#BLOB_SIZE} header is invalid.
    */
-  public NettyRequest(HttpRequest request, Channel channel, NettyMetrics nettyMetrics)
-      throws RestServiceException {
+  public NettyRequest(HttpRequest request, Channel channel, NettyMetrics nettyMetrics) throws RestServiceException {
     if (request == null || channel == null) {
       throw new IllegalArgumentException("Received null argument(s)");
     }
@@ -213,8 +223,7 @@ class NettyRequest implements RestRequest {
   }
 
   @Override
-  public void prepare()
-      throws RestServiceException {
+  public void prepare() throws RestServiceException {
     // no op.
   }
 
@@ -315,8 +324,7 @@ class NettyRequest implements RestRequest {
    * @throws IllegalStateException if {@link #readInto(AsyncWritableChannel, Callback)} has already been called.
    */
   @Override
-  public void setDigestAlgorithm(String digestAlgorithm)
-      throws NoSuchAlgorithmException {
+  public void setDigestAlgorithm(String digestAlgorithm) throws NoSuchAlgorithmException {
     if (callbackWrapper != null) {
       throw new IllegalStateException("Cannot create a digest because some content may have been consumed");
     }
@@ -353,8 +361,7 @@ class NettyRequest implements RestRequest {
    * @throws IllegalStateException if content is being added when it is not expected (GET, DELETE, HEAD).
    * @throws RestServiceException if request channel has been closed.
    */
-  protected void addContent(HttpContent httpContent)
-      throws RestServiceException {
+  protected void addContent(HttpContent httpContent) throws RestServiceException {
     if (!getRestMethod().equals(RestMethod.POST) && (!(httpContent instanceof LastHttpContent)
         || httpContent.content().readableBytes() > 0)) {
       throw new IllegalStateException("There is no content expected for " + getRestMethod());
@@ -403,7 +410,7 @@ class NettyRequest implements RestRequest {
    * @param httpContent the piece of {@link HttpContent} that needs to be written to the {@code writeChannel}.
    */
   protected void writeContent(AsyncWritableChannel writeChannel, ReadIntoCallbackWrapper callbackWrapper,
-                              HttpContent httpContent) {
+      HttpContent httpContent) {
     boolean retained = false;
     ByteBuffer[] contentBuffers;
     Callback<Long>[] writeCallbacks;
@@ -508,8 +515,7 @@ class NettyRequest implements RestRequest {
    * @throws RestServiceException if {@code httpContent} is the last piece of content and the size of data does
    *                              not match the size in the header.
    */
-  private void validateState(HttpContent httpContent)
-      throws RestServiceException {
+  private void validateState(HttpContent httpContent) throws RestServiceException {
     long bytesReceivedTillNow = bytesReceived.addAndGet(httpContent.content().readableBytes());
     if (size > 0) {
       if (bytesReceivedTillNow > size) {

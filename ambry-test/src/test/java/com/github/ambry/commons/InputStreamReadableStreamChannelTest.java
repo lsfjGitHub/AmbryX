@@ -18,8 +18,6 @@ import com.github.ambry.router.CopyingAsyncWritableChannel;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.TestUtils;
 import com.github.ambry.utils.Utils;
-import org.junit.Test;
-
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
@@ -29,6 +27,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import org.junit.Test;
 
 import static org.junit.Assert.*;
 

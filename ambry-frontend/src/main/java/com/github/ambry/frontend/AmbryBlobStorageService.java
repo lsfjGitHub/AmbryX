@@ -18,15 +18,33 @@ import com.github.ambry.commons.ByteBufferReadableStreamChannel;
 import com.github.ambry.config.FrontendConfig;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
-import com.github.ambry.rest.*;
-import com.github.ambry.router.*;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
+import com.github.ambry.protocol.GetOption;
+import com.github.ambry.rest.BlobStorageService;
+import com.github.ambry.rest.IdConverter;
+import com.github.ambry.rest.IdConverterFactory;
+import com.github.ambry.rest.ResponseStatus;
+import com.github.ambry.rest.RestMethod;
+import com.github.ambry.rest.RestRequest;
+import com.github.ambry.rest.RestRequestMetrics;
+import com.github.ambry.rest.RestResponseChannel;
+import com.github.ambry.rest.RestResponseHandler;
+import com.github.ambry.rest.RestServiceErrorCode;
+import com.github.ambry.rest.RestServiceException;
+import com.github.ambry.rest.RestUtils;
+import com.github.ambry.rest.SecurityService;
+import com.github.ambry.rest.SecurityServiceFactory;
+import com.github.ambry.router.Callback;
+import com.github.ambry.router.GetBlobOptions;
+import com.github.ambry.router.GetBlobResult;
+import com.github.ambry.router.ReadableStreamChannel;
+import com.github.ambry.router.Router;
+import com.github.ambry.router.RouterException;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.GregorianCalendar;
 import java.util.Map;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -71,8 +89,8 @@ class AmbryBlobStorageService implements BlobStorageService {
    * @param securityServiceFactory the {@link SecurityServiceFactory} to use to get an {@link SecurityService}.
    */
   public AmbryBlobStorageService(FrontendConfig frontendConfig, FrontendMetrics frontendMetrics,
-                                 RestResponseHandler responseHandler, Router router, IdConverterFactory idConverterFactory,
-                                 SecurityServiceFactory securityServiceFactory) {
+      RestResponseHandler responseHandler, Router router, IdConverterFactory idConverterFactory,
+      SecurityServiceFactory securityServiceFactory) {
     this.frontendConfig = frontendConfig;
     this.frontendMetrics = frontendMetrics;
     this.responseHandler = responseHandler;
@@ -83,8 +101,7 @@ class AmbryBlobStorageService implements BlobStorageService {
   }
 
   @Override
-  public void start()
-      throws InstantiationException {
+  public void start() throws InstantiationException {
     long startupBeginTime = System.currentTimeMillis();
     idConverter = idConverterFactory.getIdConverter();
     securityService = securityServiceFactory.getSecurityService();
@@ -136,7 +153,7 @@ class AmbryBlobStorageService implements BlobStorageService {
         }
       }
       restRequest.getMetricsTracker().injectMetrics(requestMetrics);
-      GetBlobOptions options = RestUtils.buildGetBlobOptions(restRequest.getArgs(), subresource);
+      GetBlobOptions options = RestUtils.buildGetBlobOptions(restRequest.getArgs(), subresource, GetOption.None);
       GetCallback routerCallback = new GetCallback(restRequest, restResponseChannel, subresource, options);
       preProcessingTime = System.currentTimeMillis() - processingStartTime;
       SecurityProcessRequestCallback securityCallback =
@@ -228,7 +245,7 @@ class AmbryBlobStorageService implements BlobStorageService {
    * @param exception any {@link Exception} that occurred during the handling of {@code restRequest}.
    */
   protected void submitResponse(RestRequest restRequest, RestResponseChannel restResponseChannel,
-                                ReadableStreamChannel responseBody, Exception exception) {
+      ReadableStreamChannel responseBody, Exception exception) {
     try {
       if (exception != null && exception instanceof RouterException) {
         exception = new RestServiceException(exception,
@@ -278,8 +295,7 @@ class AmbryBlobStorageService implements BlobStorageService {
    * Checks if {@link AmbryBlobStorageService} is available to serve requests.
    * @throws RestServiceException if {@link AmbryBlobStorageService} is not available to serve requests.
    */
-  private void checkAvailable()
-      throws RestServiceException {
+  private void checkAvailable() throws RestServiceException {
     if (!isUp) {
       throw new RestServiceException("AmbryBlobStorageService unavailable", RestServiceErrorCode.ServiceUnavailable);
     }
@@ -301,17 +317,17 @@ class AmbryBlobStorageService implements BlobStorageService {
     }
 
     InboundIdConverterCallback(RestRequest restRequest, RestResponseChannel restResponseChannel,
-                               HeadCallback callback) {
+        HeadCallback callback) {
       this(restRequest, restResponseChannel, null, callback, null);
     }
 
     InboundIdConverterCallback(RestRequest restRequest, RestResponseChannel restResponseChannel,
-                               DeleteCallback callback) {
+        DeleteCallback callback) {
       this(restRequest, restResponseChannel, null, null, callback);
     }
 
     private InboundIdConverterCallback(RestRequest restRequest, RestResponseChannel restResponseChannel,
-                                       GetCallback getCallback, HeadCallback headCallback, DeleteCallback deleteCallback) {
+        GetCallback getCallback, HeadCallback headCallback, DeleteCallback deleteCallback) {
       this.restRequest = restRequest;
       this.restResponseChannel = restResponseChannel;
       this.getCallback = getCallback;
@@ -344,7 +360,8 @@ class AmbryBlobStorageService implements BlobStorageService {
               break;
             case HEAD:
               headCallback.markStartTime();
-              router.getBlob(result, new GetBlobOptions(GetBlobOptions.OperationType.BlobInfo, null), headCallback);
+              router.getBlob(result, new GetBlobOptions(GetBlobOptions.OperationType.BlobInfo, GetOption.None, null),
+                  headCallback);
               break;
             case DELETE:
               deleteCallback.markStartTime();
@@ -387,21 +404,21 @@ class AmbryBlobStorageService implements BlobStorageService {
     private byte[] userMetadata;
 
     SecurityProcessRequestCallback(RestRequest restRequest, RestResponseChannel restResponseChannel,
-                                   GetCallback callback) {
+        GetCallback callback) {
       this(restRequest, restResponseChannel, PROCESS_GET, frontendMetrics.getSecurityRequestTimeInMs,
           frontendMetrics.getSecurityRequestCallbackProcessingTimeInMs);
       this.getCallback = callback;
     }
 
     SecurityProcessRequestCallback(RestRequest restRequest, RestResponseChannel restResponseChannel,
-                                   HeadCallback callback) {
+        HeadCallback callback) {
       this(restRequest, restResponseChannel, PROCESS_HEAD, frontendMetrics.headSecurityRequestTimeInMs,
           frontendMetrics.headSecurityRequestCallbackProcessingTimeInMs);
       this.headCallback = callback;
     }
 
     SecurityProcessRequestCallback(RestRequest restRequest, RestResponseChannel restResponseChannel,
-                                   BlobProperties blobProperties, byte[] userMetadata, PostCallback callback) {
+        BlobProperties blobProperties, byte[] userMetadata, PostCallback callback) {
       this(restRequest, restResponseChannel, PROCESS_POST, frontendMetrics.postSecurityRequestTimeInMs,
           frontendMetrics.postSecurityRequestCallbackProcessingTimeInMs);
       this.blobProperties = blobProperties;
@@ -410,14 +427,14 @@ class AmbryBlobStorageService implements BlobStorageService {
     }
 
     SecurityProcessRequestCallback(RestRequest restRequest, RestResponseChannel restResponseChannel,
-                                   DeleteCallback callback) {
+        DeleteCallback callback) {
       this(restRequest, restResponseChannel, PROCESS_DELETE, frontendMetrics.deleteSecurityRequestTimeInMs,
           frontendMetrics.deleteSecurityRequestCallbackProcessingTimeInMs);
       this.deleteCallback = callback;
     }
 
     private SecurityProcessRequestCallback(RestRequest restRequest, RestResponseChannel restResponseChannel,
-                                           String operationType, Histogram operationTimeTracker, Histogram callbackProcessingTimeTracker) {
+        String operationType, Histogram operationTimeTracker, Histogram callbackProcessingTimeTracker) {
       this.restRequest = restRequest;
       this.restResponseChannel = restResponseChannel;
       callbackTracker =
@@ -442,8 +459,8 @@ class AmbryBlobStorageService implements BlobStorageService {
           logger.trace("Forwarding {} to the IdConverter/Router", restMethod);
           switch (restMethod) {
             case GET:
-              String receivedId = RestUtils
-                  .getOperationOrBlobIdFromUri(restRequest, RestUtils.getBlobSubResource(restRequest),
+              String receivedId =
+                  RestUtils.getOperationOrBlobIdFromUri(restRequest, RestUtils.getBlobSubResource(restRequest),
                       frontendConfig.frontendPathPrefixesToRemove);
               InboundIdConverterCallback idConverterCallback =
                   new InboundIdConverterCallback(restRequest, restResponseChannel, getCallback);
@@ -501,7 +518,7 @@ class AmbryBlobStorageService implements BlobStorageService {
      * @param callbackProcessingTimeTracker the {@link Histogram} of the time taken by the callback of the operation.
      */
     CallbackTracker(RestRequest restRequest, String operationType, Histogram operationTimeTracker,
-                    Histogram callbackProcessingTimeTracker) {
+        Histogram callbackProcessingTimeTracker) {
       this.restRequest = restRequest;
       this.operationType = operationType;
       this.operationTimeTracker = operationTimeTracker;
@@ -557,7 +574,7 @@ class AmbryBlobStorageService implements BlobStorageService {
      *                {@link Router#getBlob(String, GetBlobOptions, Callback)} call.
      */
     GetCallback(RestRequest restRequest, RestResponseChannel restResponseChannel, RestUtils.SubResource subResource,
-                GetBlobOptions options) {
+        GetBlobOptions options) {
       this.restRequest = restRequest;
       this.restResponseChannel = restResponseChannel;
       this.subResource = subResource;
@@ -588,8 +605,8 @@ class AmbryBlobStorageService implements BlobStorageService {
                   frontendMetrics.getSecurityResponseTimeInMs,
                   frontendMetrics.getSecurityResponseCallbackProcessingTimeInMs);
           securityCallbackTracker.markOperationStart();
-          securityService
-              .processResponse(restRequest, restResponseChannel, routerResult.getBlobInfo(), new Callback<Void>() {
+          securityService.processResponse(restRequest, restResponseChannel, routerResult.getBlobInfo(),
+              new Callback<Void>() {
                 @Override
                 public void onCompletion(Void securityResult, Exception securityException) {
                   securityCallbackTracker.markOperationEnd();
@@ -602,8 +619,8 @@ class AmbryBlobStorageService implements BlobStorageService {
                         Map<String, String> userMetadata = RestUtils.buildUserMetadata(blobInfo.getUserMetadata());
                         if (userMetadata == null) {
                           restResponseChannel.setHeader(RestUtils.Headers.CONTENT_TYPE, "application/octet-stream");
-                          restResponseChannel
-                              .setHeader(RestUtils.Headers.CONTENT_LENGTH, blobInfo.getUserMetadata().length);
+                          restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH,
+                              blobInfo.getUserMetadata().length);
                           response = new ByteBufferReadableStreamChannel(ByteBuffer.wrap(blobInfo.getUserMetadata()));
                         } else {
                           setUserMetadataHeaders(userMetadata, restResponseChannel);
@@ -856,8 +873,8 @@ class AmbryBlobStorageService implements BlobStorageService {
                   frontendMetrics.headSecurityResponseTimeInMs,
                   frontendMetrics.headSecurityResponseCallbackProcessingTimeInMs);
           securityCallbackTracker.markOperationStart();
-          securityService
-              .processResponse(restRequest, restResponseChannel, routerResult.getBlobInfo(), new Callback<Void>() {
+          securityService.processResponse(restRequest, restResponseChannel, routerResult.getBlobInfo(),
+              new Callback<Void>() {
                 @Override
                 public void onCompletion(Void securityResult, Exception securityException) {
                   callbackTracker.markOperationEnd();

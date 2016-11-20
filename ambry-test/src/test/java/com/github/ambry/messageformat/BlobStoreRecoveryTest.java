@@ -13,17 +13,20 @@
  */
 package com.github.ambry.messageformat;
 
-import com.github.ambry.store.*;
+import com.github.ambry.store.MessageInfo;
+import com.github.ambry.store.MessageStoreRecovery;
+import com.github.ambry.store.Read;
+import com.github.ambry.store.StoreKey;
+import com.github.ambry.store.StoreKeyFactory;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Utils;
-import org.junit.Assert;
-import org.junit.Test;
-
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.Random;
+import org.junit.Assert;
+import org.junit.Test;
 
 
 class MockId extends StoreKey {
@@ -35,8 +38,7 @@ class MockId extends StoreKey {
     this.id = id;
   }
 
-  public MockId(DataInputStream stream)
-      throws IOException {
+  public MockId(DataInputStream stream) throws IOException {
     id = Utils.readShortString(stream);
   }
 
@@ -104,8 +106,7 @@ class MockId extends StoreKey {
 class MockIdFactory implements StoreKeyFactory {
 
   @Override
-  public StoreKey getStoreKey(DataInputStream value)
-      throws IOException {
+  public StoreKey getStoreKey(DataInputStream value) throws IOException {
     return new MockId(value);
   }
 }
@@ -118,8 +119,7 @@ public class BlobStoreRecoveryTest {
     public StoreKey[] keys = {new MockId("id1"), new MockId("id2"), new MockId("id3"), new MockId("id4")};
     long expectedExpirationTimeMs = 0;
 
-    public void initialize()
-        throws MessageFormatException, IOException {
+    public void initialize() throws MessageFormatException, IOException {
       // write 3 new blob messages, and delete update messages. write the last
       // message that is partial
       byte[] usermetadata = new byte[2000];
@@ -153,11 +153,8 @@ public class BlobStoreRecoveryTest {
           new PutMessageFormatInputStream(keys[3], new BlobProperties(4000, "test"), ByteBuffer.wrap(usermetadata),
               new ByteBufferInputStream(ByteBuffer.wrap(blob)), 4000);
 
-      buffer = ByteBuffer.allocate((int) (msg1.getSize() +
-          msg2.getSize() +
-          msg3.getSize() +
-          msg4.getSize() +
-          msg5.getSize() / 2));
+      buffer = ByteBuffer.allocate(
+          (int) (msg1.getSize() + msg2.getSize() + msg3.getSize() + msg4.getSize() + msg5.getSize() / 2));
 
       writeToBuffer(msg1, (int) msg1.getSize());
       writeToBuffer(msg2, (int) msg2.getSize());
@@ -167,8 +164,7 @@ public class BlobStoreRecoveryTest {
       buffer.position(0);
     }
 
-    private void writeToBuffer(MessageFormatInputStream stream, int sizeToWrite)
-        throws IOException {
+    private void writeToBuffer(MessageFormatInputStream stream, int sizeToWrite) throws IOException {
       long sizeWritten = 0;
       while (sizeWritten < sizeToWrite) {
         int read = stream.read(buffer.array(), buffer.position(), (int) sizeToWrite);
@@ -178,8 +174,7 @@ public class BlobStoreRecoveryTest {
     }
 
     @Override
-    public void readInto(ByteBuffer bufferToWrite, long position)
-        throws IOException {
+    public void readInto(ByteBuffer bufferToWrite, long position) throws IOException {
       bufferToWrite.put(buffer.array(), (int) position, bufferToWrite.remaining());
     }
 
@@ -189,8 +184,7 @@ public class BlobStoreRecoveryTest {
   }
 
   @Test
-  public void recoveryTest()
-      throws MessageFormatException, IOException {
+  public void recoveryTest() throws MessageFormatException, IOException {
     MessageStoreRecovery recovery = new BlobStoreRecovery();
     // create log and write to it
     ReadImp readrecovery = new ReadImp();

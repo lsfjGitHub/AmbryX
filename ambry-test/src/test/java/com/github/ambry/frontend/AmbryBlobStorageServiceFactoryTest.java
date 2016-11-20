@@ -21,9 +21,8 @@ import com.github.ambry.rest.MockRestRequestResponseHandler;
 import com.github.ambry.rest.RestResponseHandler;
 import com.github.ambry.router.InMemoryRouter;
 import com.github.ambry.router.Router;
-import org.junit.Test;
-
 import java.util.Properties;
+import org.junit.Test;
 
 import static org.junit.Assert.*;
 
@@ -39,8 +38,7 @@ public class AmbryBlobStorageServiceFactoryTest {
    * @throws Exception
    */
   @Test
-  public void getAmbryBlobStorageServiceTest()
-      throws Exception {
+  public void getAmbryBlobStorageServiceTest() throws Exception {
     // dud properties. server should pick up defaults
     Properties properties = new Properties();
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);
@@ -59,8 +57,7 @@ public class AmbryBlobStorageServiceFactoryTest {
    * @throws Exception
    */
   @Test
-  public void getAmbryBlobStorageServiceFactoryWithBadInputTest()
-      throws Exception {
+  public void getAmbryBlobStorageServiceFactoryWithBadInputTest() throws Exception {
     // dud properties. server should pick up defaults
     Properties properties = new Properties();
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);

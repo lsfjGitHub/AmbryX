@@ -22,8 +22,6 @@ import com.github.ambry.notification.BlobReplicaSourceType;
 import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
-import junit.framework.Assert;
-
 import java.io.IOException;
 import java.net.URISyntaxException;
 import java.security.GeneralSecurityException;
@@ -34,8 +32,9 @@ import java.util.Properties;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import junit.framework.Assert;
 
-import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.*;
 
 
 /**
@@ -52,23 +51,25 @@ public class MockCluster {
 
   public MockCluster(NotificationSystem notificationSystem, boolean enableHardDeletes, Time time)
       throws IOException, InstantiationException, URISyntaxException, GeneralSecurityException {
-    this(notificationSystem, false, "", new Properties(), enableHardDeletes, time);
+    this(notificationSystem, new Properties(), enableHardDeletes, time);
   }
 
-  public MockCluster(NotificationSystem notificationSystem, boolean enableSSL, String datacenters, Properties sslProps,
-                     boolean enableHardDeletes, Time time)
+  public MockCluster(NotificationSystem notificationSystem, Properties sslProps, boolean enableHardDeletes, Time time)
       throws IOException, InstantiationException, URISyntaxException, GeneralSecurityException {
     // sslEnabledDatacenters represents comma separated list of datacenters to which ssl should be enabled
+    String sslEnabledDataCentersStr = sslProps.getProperty("clustermap.ssl.enabled.datacenters");
+    ArrayList<String> sslEnabledDataCenterList =
+        sslEnabledDataCentersStr != null ? Utils.splitString(sslEnabledDataCentersStr, ",") : new ArrayList<String>();
+
     this.notificationSystem = notificationSystem;
-    clusterMap = new MockClusterMap(enableSSL, 9, 3, 3);
+    clusterMap = new MockClusterMap(sslEnabledDataCentersStr != null, 9, 3, 3);
+
     serverList = new ArrayList<AmbryServer>();
-    ArrayList<String> datacenterList = Utils.splitString(datacenters, ",");
     List<MockDataNodeId> dataNodes = clusterMap.getDataNodes();
     try {
       for (MockDataNodeId dataNodeId : dataNodes) {
-        if (enableSSL) {
-          String sslEnabledDatacenters = getSSLEnabledDatacenterValue(dataNodeId.getDatacenterName(), datacenterList);
-          sslProps.setProperty("ssl.enabled.datacenters", sslEnabledDatacenters);
+        if (sslEnabledDataCentersStr != null) {
+          dataNodeId.setSslEnabledDataCenters(sslEnabledDataCenterList);
         }
         initializeServer(dataNodeId, sslProps, enableHardDeletes, time);
       }
@@ -104,16 +105,14 @@ public class MockCluster {
     serverList.add(server);
   }
 
-  public void startServers()
-      throws InstantiationException {
+  public void startServers() throws InstantiationException {
     serverInitialized = true;
     for (AmbryServer server : serverList) {
       server.startup();
     }
   }
 
-  public void cleanup()
-      throws IOException {
+  public void cleanup() throws IOException {
     if (serverInitialized) {
       CountDownLatch shutdownLatch = new CountDownLatch(serverList.size());
       for (AmbryServer server : serverList) {
@@ -126,18 +125,6 @@ public class MockCluster {
       }
       clusterMap.cleanup();
     }
-  }
-
-  /**
-   * Find the value for sslEnabledDatacenter config for the given datacenter
-   * @param datacenter for which sslEnabledDatacenter config value has to be determinded
-   * @param sslEnabledDataCenterList list of datacenters upon which ssl should be enabled
-   * @return the config value for sslEnabledDatacenters for the given datacenter
-   */
-  private String getSSLEnabledDatacenterValue(String datacenter, ArrayList<String> sslEnabledDataCenterList) {
-    ArrayList<String> localCopy = new ArrayList<String>(sslEnabledDataCenterList);
-    localCopy.remove(datacenter);
-    return Utils.concatenateString(localCopy, ",");
   }
 
   public List<DataNodeId> getOneDataNodeFromEachDatacenter(ArrayList<String> datacenterList) {
@@ -206,7 +193,7 @@ class MockNotificationSystem implements NotificationSystem {
 
   @Override
   public synchronized void onBlobReplicaCreated(String sourceHost, int port, String blobId,
-                                                BlobReplicaSourceType sourceType) {
+      BlobReplicaSourceType sourceType) {
     Tracker tracker = objectTracker.get(blobId);
     if (tracker == null) {
       tracker = new Tracker(numberOfReplicas);
@@ -217,14 +204,13 @@ class MockNotificationSystem implements NotificationSystem {
 
   @Override
   public synchronized void onBlobReplicaDeleted(String sourceHost, int port, String blobId,
-                                                BlobReplicaSourceType sourceType) {
+      BlobReplicaSourceType sourceType) {
     Tracker tracker = objectTracker.get(blobId);
     tracker.totalReplicasDeleted.countDown();
   }
 
   @Override
-  public void close()
-      throws IOException {
+  public void close() throws IOException {
     // ignore
   }
 

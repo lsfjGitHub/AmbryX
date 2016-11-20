@@ -13,10 +13,9 @@
  */
 package com.github.ambry.rest;
 
+import java.util.Arrays;
 import junit.framework.Assert;
 import org.junit.Test;
-
-import java.util.Arrays;
 
 
 /**

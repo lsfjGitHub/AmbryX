@@ -17,7 +17,6 @@ import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.commons.ServerErrorCode;
 import com.github.ambry.store.MessageInfo;
-
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -65,8 +64,7 @@ public class PartitionResponseInfo {
     return errorCode;
   }
 
-  public static PartitionResponseInfo readFrom(DataInputStream stream, ClusterMap map)
-      throws IOException {
+  public static PartitionResponseInfo readFrom(DataInputStream stream, ClusterMap map) throws IOException {
     PartitionId partitionId = map.getPartitionIdFromStream(stream);
     List<MessageInfo> messageInfoList = MessageInfoListSerde.deserializeMessageInfoList(stream, map);
     ServerErrorCode error = ServerErrorCode.values()[stream.readShort()];

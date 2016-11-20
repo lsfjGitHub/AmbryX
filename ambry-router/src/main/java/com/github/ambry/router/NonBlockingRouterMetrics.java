@@ -13,10 +13,13 @@
  */
 package com.github.ambry.router;
 
-import com.codahale.metrics.*;
+import com.codahale.metrics.Counter;
+import com.codahale.metrics.Gauge;
+import com.codahale.metrics.Histogram;
+import com.codahale.metrics.Meter;
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.clustermap.DataNodeId;
-
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -202,10 +205,10 @@ public class NonBlockingRouterMetrics {
         metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "ResponseDeserializationErrorCount"));
     operationManagerPollErrorCount =
         metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "OperationManagerPollErrorCount"));
-    operationManagerHandleResponseErrorCount = metricRegistry
-        .counter(MetricRegistry.name(NonBlockingRouter.class, "OperationManagerHandleResponseErrorCount"));
-    requestResponseHandlerUnexpectedErrorCount = metricRegistry
-        .counter(MetricRegistry.name(NonBlockingRouter.class, "RequestResponseHandlerUnexpectedErrorCount"));
+    operationManagerHandleResponseErrorCount = metricRegistry.counter(
+        MetricRegistry.name(NonBlockingRouter.class, "OperationManagerHandleResponseErrorCount"));
+    requestResponseHandlerUnexpectedErrorCount = metricRegistry.counter(
+        MetricRegistry.name(NonBlockingRouter.class, "RequestResponseHandlerUnexpectedErrorCount"));
     chunkFillerUnexpectedErrorCount =
         metricRegistry.counter(MetricRegistry.name(NonBlockingRouter.class, "ChunkFillerUnexpectedErrorCount"));
     operationFailureWithUnsetExceptionCount =
@@ -255,8 +258,8 @@ public class NonBlockingRouterMetrics {
     // Track metrics at the DataNode level.
     dataNodeToMetrics = new HashMap<>();
     for (DataNodeId dataNodeId : clusterMap.getDataNodeIds()) {
-      String dataNodeName = dataNodeId.getDatacenterName() + "." + dataNodeId.getHostname() + "." + Integer
-          .toString(dataNodeId.getPort());
+      String dataNodeName = dataNodeId.getDatacenterName() + "." + dataNodeId.getHostname() + "." + Integer.toString(
+          dataNodeId.getPort());
       dataNodeToMetrics.put(dataNodeId, new NodeLevelMetrics(metricRegistry, dataNodeName));
     }
   }
@@ -275,9 +278,9 @@ public class NonBlockingRouterMetrics {
         return requestResponseHandlerThread.isAlive() ? 1L : 0L;
       }
     };
-    metricRegistry
-        .register(MetricRegistry.name(NonBlockingRouter.class, requestResponseHandlerThread.getName() + "Running"),
-            requestResponseHandlerThreadRunning);
+    metricRegistry.register(
+        MetricRegistry.name(NonBlockingRouter.class, requestResponseHandlerThread.getName() + "Running"),
+        requestResponseHandlerThreadRunning);
   }
 
   /**
@@ -487,8 +490,8 @@ public class NonBlockingRouterMetrics {
       // Request latency.
       putRequestLatencyMs =
           registry.histogram(MetricRegistry.name(PutOperation.class, dataNodeName, "PutRequestLatencyMs"));
-      getBlobInfoRequestLatencyMs = registry
-          .histogram(MetricRegistry.name(GetBlobInfoOperation.class, dataNodeName, "GetBlobInfoRequestLatencyMs"));
+      getBlobInfoRequestLatencyMs = registry.histogram(
+          MetricRegistry.name(GetBlobInfoOperation.class, dataNodeName, "GetBlobInfoRequestLatencyMs"));
       getRequestLatencyMs =
           registry.histogram(MetricRegistry.name(GetBlobOperation.class, dataNodeName, "GetRequestLatencyMs"));
       deleteRequestLatencyMs =
@@ -497,8 +500,8 @@ public class NonBlockingRouterMetrics {
       // Request error count.
       putRequestErrorCount =
           registry.counter(MetricRegistry.name(PutOperation.class, dataNodeName, "PutRequestErrorCount"));
-      getBlobInfoRequestErrorCount = registry
-          .counter(MetricRegistry.name(GetBlobInfoOperation.class, dataNodeName, "GetBlobInfoRequestErrorCount"));
+      getBlobInfoRequestErrorCount = registry.counter(
+          MetricRegistry.name(GetBlobInfoOperation.class, dataNodeName, "GetBlobInfoRequestErrorCount"));
       getRequestErrorCount =
           registry.counter(MetricRegistry.name(GetBlobOperation.class, dataNodeName, "GetRequestErrorCount"));
       deleteRequestErrorCount =

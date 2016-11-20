@@ -16,6 +16,7 @@ package com.github.ambry.rest;
 import com.github.ambry.config.VerifiableProperties;
 import com.github.ambry.messageformat.BlobInfo;
 import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.protocol.GetOption;
 import com.github.ambry.router.ByteBufferRSC;
 import com.github.ambry.router.Callback;
 import com.github.ambry.router.GetBlobOptions;
@@ -74,8 +75,7 @@ public class MockBlobStorageService implements BlobStorageService {
   }
 
   @Override
-  public void start()
-      throws InstantiationException {
+  public void start() throws InstantiationException {
     serviceRunning = true;
   }
 
@@ -89,7 +89,7 @@ public class MockBlobStorageService implements BlobStorageService {
     if (shouldProceed(restRequest, restResponseChannel)) {
       String blobId = getBlobId(restRequest);
       MockGetCallback callback = new MockGetCallback(this, restRequest, restResponseChannel);
-      router.getBlob(blobId, new GetBlobOptions(GetBlobOptions.OperationType.All, null), callback);
+      router.getBlob(blobId, new GetBlobOptions(GetBlobOptions.OperationType.All, GetOption.None, null), callback);
     }
   }
 
@@ -119,7 +119,7 @@ public class MockBlobStorageService implements BlobStorageService {
   public void handleHead(RestRequest restRequest, RestResponseChannel restResponseChannel) {
     if (shouldProceed(restRequest, restResponseChannel)) {
       String blobId = getBlobId(restRequest);
-      router.getBlob(blobId, new GetBlobOptions(GetBlobOptions.OperationType.BlobInfo, null),
+      router.getBlob(blobId, new GetBlobOptions(GetBlobOptions.OperationType.BlobInfo, GetOption.None, null),
           new MockHeadCallback(this, restRequest, restResponseChannel));
     }
   }
@@ -319,8 +319,7 @@ class MockGetCallback implements Callback<GetBlobResult> {
    * @param blobInfo the {@link BlobInfo} to refer to while setting headers.
    * @throws RestServiceException if there was any problem setting the headers.
    */
-  private void setResponseHeaders(BlobInfo blobInfo)
-      throws RestServiceException {
+  private void setResponseHeaders(BlobInfo blobInfo) throws RestServiceException {
     BlobProperties blobProperties = blobInfo.getBlobProperties();
     restResponseChannel.setHeader(RestUtils.Headers.LAST_MODIFIED, new Date(blobProperties.getCreationTimeInMs()));
     restResponseChannel.setHeader(RestUtils.Headers.BLOB_SIZE, blobProperties.getBlobSize());
@@ -385,8 +384,7 @@ class MockPostCallback implements Callback<String> {
    * @param location the location of the created resource.
    * @throws RestServiceException if there was any problem setting the headers.
    */
-  private void setResponseHeaders(String location)
-      throws RestServiceException {
+  private void setResponseHeaders(String location) throws RestServiceException {
     restResponseChannel.setStatus(ResponseStatus.Created);
     restResponseChannel.setHeader(RestUtils.Headers.LOCATION, location);
     restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, 0);
@@ -489,8 +487,7 @@ class MockHeadCallback implements Callback<GetBlobResult> {
    * @param blobInfo the {@link BlobInfo} to refer to while setting headers.
    * @throws RestServiceException if there was any problem setting the headers.
    */
-  private void setBlobPropertiesResponseHeaders(BlobInfo blobInfo)
-      throws RestServiceException {
+  private void setBlobPropertiesResponseHeaders(BlobInfo blobInfo) throws RestServiceException {
     BlobProperties blobProperties = blobInfo.getBlobProperties();
     restResponseChannel.setHeader(RestUtils.Headers.LAST_MODIFIED, new Date(blobProperties.getCreationTimeInMs()));
     restResponseChannel.setHeader(RestUtils.Headers.CONTENT_LENGTH, blobProperties.getBlobSize());

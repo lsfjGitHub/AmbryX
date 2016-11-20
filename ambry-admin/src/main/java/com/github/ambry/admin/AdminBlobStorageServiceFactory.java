@@ -16,7 +16,11 @@ package com.github.ambry.admin;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.config.AdminConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.rest.*;
+import com.github.ambry.rest.BlobStorageService;
+import com.github.ambry.rest.BlobStorageServiceFactory;
+import com.github.ambry.rest.IdConverterFactory;
+import com.github.ambry.rest.RestResponseHandler;
+import com.github.ambry.rest.SecurityServiceFactory;
 import com.github.ambry.router.Router;
 import com.github.ambry.utils.Utils;
 import org.slf4j.Logger;
@@ -49,8 +53,7 @@ public class AdminBlobStorageServiceFactory implements BlobStorageServiceFactory
    * @throws IllegalArgumentException if any of the arguments are null.
    */
   public AdminBlobStorageServiceFactory(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
-      RestResponseHandler responseHandler, Router router)
-      throws Exception {
+      RestResponseHandler responseHandler, Router router) throws Exception {
     if (verifiableProperties == null || clusterMap == null || responseHandler == null || router == null) {
       throw new IllegalArgumentException("Null arguments were provided during instantiation!");
     } else {

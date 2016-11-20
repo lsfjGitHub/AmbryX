@@ -17,20 +17,29 @@ import com.codahale.metrics.Timer;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.utils.Time;
 import com.github.ambry.utils.Utils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.io.DataInputStream;
 import java.io.File;
 import java.io.FilenameFilter;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Comparator;
+import java.util.EnumSet;
+import java.util.HashSet;
+import java.util.List;
+import java.util.ListIterator;
+import java.util.Map;
+import java.util.Random;
+import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentNavigableMap;
 import java.util.concurrent.ConcurrentSkipListMap;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -89,8 +98,8 @@ class PersistentIndex {
    * @throws StoreException
    */
   public PersistentIndex(String datadir, ScheduledExecutorService scheduler, Log log, StoreConfig config,
-                         StoreKeyFactory factory, MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete, StoreMetrics metrics,
-                         Time time) throws StoreException {
+      StoreKeyFactory factory, MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete, StoreMetrics metrics,
+      Time time) throws StoreException {
     /*
     If a put and a delete of a key happens within the same segment, the segment will have only one entry for it,
     whereas the journal keeps both. In order to account for this, and to ensure that the journal always has all the
@@ -117,8 +126,8 @@ class PersistentIndex {
    * @throws StoreException
    */
   protected PersistentIndex(String datadir, ScheduledExecutorService scheduler, Log log, StoreConfig config,
-                            StoreKeyFactory factory, MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete, StoreMetrics metrics,
-                            Journal journal, Time time) throws StoreException {
+      StoreKeyFactory factory, MessageStoreRecovery recovery, MessageStoreHardDelete hardDelete, StoreMetrics metrics,
+      Journal journal, Time time) throws StoreException {
     try {
       this.time = time;
       this.scheduler = scheduler;
@@ -675,7 +684,7 @@ class PersistentIndex {
   }
 
   private long getTotalBytesRead(StoreFindToken newToken, List<MessageInfo> messageEntries,
-                                 long logEndOffsetBeforeFind) {
+      long logEndOffsetBeforeFind) {
     if (newToken.getOffset() == StoreFindToken.Uninitialized_Offset) {
       if (newToken.getIndexStartOffset() == StoreFindToken.Uninitialized_Offset) {
         return 0;
@@ -704,7 +713,7 @@ class PersistentIndex {
    * @return A token representing the position in the segment/journal up to which entries have been read and returned.
    */
   private StoreFindToken findEntriesFromSegmentStartOffset(long initialSegmentStartOffset, StoreKey key,
-                                                           List<MessageInfo> messageEntries, FindEntriesCondition findEntriesCondition) throws IOException, StoreException {
+      List<MessageInfo> messageEntries, FindEntriesCondition findEntriesCondition) throws IOException, StoreException {
     long segmentStartOffset = initialSegmentStartOffset;
     if (segmentStartOffset == indexes.lastKey()) {
       // We would never have given away a token with a segmentStartOffset of the latest segment.

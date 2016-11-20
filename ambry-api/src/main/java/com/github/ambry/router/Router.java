@@ -65,7 +65,7 @@ public interface Router extends Closeable {
    * @return A future that would contain the BlobId eventually.
    */
   public Future<String> putBlob(BlobProperties blobProperties, byte[] usermetadata, ReadableStreamChannel channel,
-                                Callback<String> callback);
+      Callback<String> callback);
 
   /**
    * Requests for a blob to be deleted asynchronously and returns a future that will eventually contain information
@@ -92,6 +92,5 @@ public interface Router extends Closeable {
    * if any.
    * @throws IOException if an I/O error occurs.
    */
-  public void close()
-      throws IOException;
+  public void close() throws IOException;
 }

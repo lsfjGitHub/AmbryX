@@ -19,22 +19,40 @@ import com.github.ambry.clustermap.DataNodeId;
 import com.github.ambry.clustermap.PartitionId;
 import com.github.ambry.clustermap.ReplicaId;
 import com.github.ambry.commons.ResponseHandler;
+import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ReplicationConfig;
-import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.network.Port;
-import com.github.ambry.network.PortType;
 import com.github.ambry.notification.NotificationSystem;
-import com.github.ambry.store.*;
-import com.github.ambry.utils.*;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import java.io.*;
-import java.util.*;
+import com.github.ambry.store.FindToken;
+import com.github.ambry.store.FindTokenFactory;
+import com.github.ambry.store.StorageManager;
+import com.github.ambry.store.Store;
+import com.github.ambry.store.StoreKeyFactory;
+import com.github.ambry.utils.CrcInputStream;
+import com.github.ambry.utils.CrcOutputStream;
+import com.github.ambry.utils.SystemTime;
+import com.github.ambry.utils.Time;
+import com.github.ambry.utils.Utils;
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 final class RemoteReplicaInfo {
@@ -58,7 +76,7 @@ final class RemoteReplicaInfo {
   private final Port port;
 
   public RemoteReplicaInfo(ReplicaId replicaId, ReplicaId localReplicaId, Store localStore, FindToken token,
-                           long tokenPersistIntervalInMs, Time time, Port port) {
+      long tokenPersistIntervalInMs, Time time, Port port) {
     this.replicaId = replicaId;
     this.localReplicaId = localReplicaId;
     this.totalBytesReadFromLocalStore = 0;
@@ -184,7 +202,7 @@ final class PartitionInfo {
   private final ReplicaId localReplicaId;
 
   public PartitionInfo(List<RemoteReplicaInfo> remoteReplicas, PartitionId partitionId, Store store,
-                       ReplicaId localReplicaId) {
+      ReplicaId localReplicaId) {
     this.remoteReplicas = remoteReplicas;
     this.partitionId = partitionId;
     this.store = store;
@@ -228,7 +246,7 @@ public final class ReplicationManager {
   private final ClusterMap clusterMap;
   private final Logger logger = LoggerFactory.getLogger(getClass());
   private final ReplicaTokenPersistor persistor;
-  private final Scheduler scheduler;
+  private final ScheduledExecutorService scheduler;
   private final AtomicInteger correlationIdGenerator;
   private final DataNodeId dataNodeId;
   private final ConnectionPool connectionPool;
@@ -245,11 +263,10 @@ public final class ReplicationManager {
   private static final short Crc_Size = 8;
   private static final short Replication_Delay_Multiplier = 5;
 
-  public ReplicationManager(ReplicationConfig replicationConfig, SSLConfig sslConfig, StoreConfig storeConfig,
-                            StoreManager storeManager, StoreKeyFactory storeKeyFactory, ClusterMap clusterMap, Scheduler scheduler,
-                            DataNodeId dataNode, ConnectionPool connectionPool, MetricRegistry metricRegistry,
-                            NotificationSystem requestNotification)
-      throws ReplicationException {
+  public ReplicationManager(ReplicationConfig replicationConfig, ClusterMapConfig clusterMapConfig,
+      StoreConfig storeConfig, StorageManager storageManager, StoreKeyFactory storeKeyFactory, ClusterMap clusterMap,
+      ScheduledExecutorService scheduler, DataNodeId dataNode, ConnectionPool connectionPool,
+      MetricRegistry metricRegistry, NotificationSystem requestNotification) throws ReplicationException {
 
     try {
       this.replicationConfig = replicationConfig;
@@ -269,37 +286,42 @@ public final class ReplicationManager {
       this.notification = requestNotification;
       this.metricRegistry = metricRegistry;
       this.dataNodeRemoteReplicaInfosPerDC = new HashMap<String, DataNodeRemoteReplicaInfos>();
-      this.sslEnabledDatacenters = Utils.splitString(sslConfig.sslEnabledDatacenters, ",");
+      this.sslEnabledDatacenters = Utils.splitString(clusterMapConfig.clusterMapSslEnabledDatacenters, ",");
       this.numberOfReplicaThreads = new HashMap<String, Integer>();
 
       // initialize all partitions
       for (ReplicaId replicaId : replicaIds) {
-        List<ReplicaId> peerReplicas = replicaId.getPeerReplicaIds();
-        if (peerReplicas != null) {
-          List<RemoteReplicaInfo> remoteReplicas = new ArrayList<RemoteReplicaInfo>(peerReplicas.size());
-          for (ReplicaId remoteReplica : peerReplicas) {
-            // We need to ensure that a replica token gets persisted only after the corresponding data in the
-            // store gets flushed to disk. We use the store flush interval multiplied by a constant factor
-            // to determine the token flush interval
-            RemoteReplicaInfo remoteReplicaInfo =
-                new RemoteReplicaInfo(remoteReplica, replicaId, storeManager.getStore(replicaId.getPartitionId()),
-                    factory.getNewFindToken(), storeConfig.storeDataFlushIntervalSeconds *
-                    SystemTime.MsPerSec * Replication_Delay_Multiplier, SystemTime.getInstance(),
-                    getPortForReplica(remoteReplica, sslEnabledDatacenters));
-            replicationMetrics.addRemoteReplicaToLagMetrics(remoteReplicaInfo);
-            replicationMetrics.createRemoteReplicaErrorMetrics(remoteReplicaInfo);
-            remoteReplicas.add(remoteReplicaInfo);
-            updateReplicasToReplicate(remoteReplica.getDataNodeId().getDatacenterName(), remoteReplicaInfo);
+        PartitionId partition = replicaId.getPartitionId();
+        Store store = storageManager.getStore(partition);
+        if (store != null) {
+          List<ReplicaId> peerReplicas = replicaId.getPeerReplicaIds();
+          if (peerReplicas != null) {
+            List<RemoteReplicaInfo> remoteReplicas = new ArrayList<RemoteReplicaInfo>(peerReplicas.size());
+            for (ReplicaId remoteReplica : peerReplicas) {
+              // We need to ensure that a replica token gets persisted only after the corresponding data in the
+              // store gets flushed to disk. We use the store flush interval multiplied by a constant factor
+              // to determine the token flush interval
+              RemoteReplicaInfo remoteReplicaInfo =
+                  new RemoteReplicaInfo(remoteReplica, replicaId, store, factory.getNewFindToken(),
+                      storeConfig.storeDataFlushIntervalSeconds * SystemTime.MsPerSec * Replication_Delay_Multiplier,
+                      SystemTime.getInstance(), remoteReplica.getDataNodeId().getPortToConnectTo());
+              replicationMetrics.addRemoteReplicaToLagMetrics(remoteReplicaInfo);
+              replicationMetrics.createRemoteReplicaErrorMetrics(remoteReplicaInfo);
+              remoteReplicas.add(remoteReplicaInfo);
+              updateReplicasToReplicate(remoteReplica.getDataNodeId().getDatacenterName(), remoteReplicaInfo);
+            }
+            PartitionInfo partitionInfo = new PartitionInfo(remoteReplicas, partition, store, replicaId);
+            partitionsToReplicate.put(partition, partitionInfo);
+            List<PartitionInfo> partitionInfos = partitionGroupedByMountPath.get(replicaId.getMountPath());
+            if (partitionInfos == null) {
+              partitionInfos = new ArrayList<>();
+            }
+            partitionInfos.add(partitionInfo);
+            partitionGroupedByMountPath.put(replicaId.getMountPath(), partitionInfos);
           }
-          PartitionInfo partitionInfo = new PartitionInfo(remoteReplicas, replicaId.getPartitionId(),
-              storeManager.getStore(replicaId.getPartitionId()), replicaId);
-          partitionsToReplicate.put(replicaId.getPartitionId(), partitionInfo);
-          List<PartitionInfo> partitionInfos = partitionGroupedByMountPath.get(replicaId.getMountPath());
-          if (partitionInfos == null) {
-            partitionInfos = new ArrayList<PartitionInfo>();
-          }
-          partitionInfos.add(partitionInfo);
-          partitionGroupedByMountPath.put(replicaId.getMountPath(), partitionInfos);
+        } else {
+          logger.error(
+              "Not replicating to partition " + partition + " because an initialized store could not be found");
         }
       }
       replicationMetrics.populatePerColoMetrics(numberOfReplicaThreads.keySet());
@@ -309,8 +331,7 @@ public final class ReplicationManager {
     }
   }
 
-  public void start()
-      throws ReplicationException {
+  public void start() throws ReplicationException {
 
     try {
       // read stored tokens
@@ -339,26 +360,10 @@ public final class ReplicationManager {
 
       // start background persistent thread
       // start scheduler thread to persist index in the background
-      this.scheduler.schedule("replica token persistor", persistor, replicationConfig.replicationTokenFlushDelaySeconds,
+      this.scheduler.scheduleAtFixedRate(persistor, replicationConfig.replicationTokenFlushDelaySeconds,
           replicationConfig.replicationTokenFlushIntervalSeconds, TimeUnit.SECONDS);
     } catch (IOException e) {
       logger.error("IO error while starting replication");
-    }
-  }
-
-  /**
-   * Returns the port to be contacted for the remote replica according to the configs.
-   * @param replicaId Replica against which connection has to be establised
-   * @param sslEnabledDatacenters List of datacenters upon which SSL encryption should be enabled
-   * @return
-   */
-  public Port getPortForReplica(ReplicaId replicaId, ArrayList<String> sslEnabledDatacenters) {
-    if (sslEnabledDatacenters.contains(replicaId.getDataNodeId().getDatacenterName())) {
-      Port toReturn = new Port(replicaId.getDataNodeId().getSSLPort(), PortType.SSL);
-      logger.trace("Assigning ssl for remote replica " + replicaId);
-      return toReturn;
-    } else {
-      return new Port(replicaId.getDataNodeId().getPort(), PortType.PLAINTEXT);
     }
   }
 
@@ -370,7 +375,7 @@ public final class ReplicationManager {
    * @param totalBytesRead Total bytes read by the replica
    */
   public void updateTotalBytesReadByRemoteReplica(PartitionId partitionId, String hostName, String replicaPath,
-                                                  long totalBytesRead) {
+      long totalBytesRead) {
     RemoteReplicaInfo remoteReplicaInfo = getRemoteReplicaInfo(partitionId, hostName, replicaPath);
     if (remoteReplicaInfo != null) {
       remoteReplicaInfo.setTotalBytesReadFromLocalStore(totalBytesRead);
@@ -423,8 +428,7 @@ public final class ReplicationManager {
    * then persists all the replica tokens
    * @throws ReplicationException
    */
-  public void shutdown()
-      throws ReplicationException {
+  public void shutdown() throws ReplicationException {
     try {
       // stop all replica threads
       for (Map.Entry<String, ArrayList<ReplicaThread>> replicaThreads : replicaThreadPools.entrySet()) {
@@ -555,8 +559,7 @@ public final class ReplicationManager {
    * @throws ReplicationException
    * @throws IOException
    */
-  private void readFromFileAndPersistIfNecessary(String mountPath)
-      throws ReplicationException, IOException {
+  private void readFromFileAndPersistIfNecessary(String mountPath) throws ReplicationException, IOException {
     logger.info("Reading replica tokens for mount path {}", mountPath);
     long readStartTimeMs = SystemTime.getInstance().milliseconds();
     File replicaTokenFile = new File(mountPath, replicaTokenFileName);
@@ -585,9 +588,9 @@ public final class ReplicationManager {
               PartitionInfo partitionInfo = partitionsToReplicate.get(partitionId);
               boolean updatedToken = false;
               for (RemoteReplicaInfo remoteReplicaInfo : partitionInfo.getRemoteReplicaInfos()) {
-                if (remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname().equalsIgnoreCase(hostname) &&
-                    remoteReplicaInfo.getReplicaId().getDataNodeId().getPort() == port &&
-                    remoteReplicaInfo.getReplicaId().getReplicaPath().equals(replicaPath)) {
+                if (remoteReplicaInfo.getReplicaId().getDataNodeId().getHostname().equalsIgnoreCase(hostname)
+                    && remoteReplicaInfo.getReplicaId().getDataNodeId().getPort() == port
+                    && remoteReplicaInfo.getReplicaId().getReplicaPath().equals(replicaPath)) {
                   logger.info("Read token for partition {} remote host {} port {} token {}", partitionId, hostname,
                       port, token);
                   if (partitionInfo.getStore().getSizeInBytes() > 0) {
@@ -643,8 +646,7 @@ public final class ReplicationManager {
     private Logger logger = LoggerFactory.getLogger(getClass());
     private final short version = 0;
 
-    private void write(String mountPath, boolean shuttingDown)
-        throws IOException, ReplicationException {
+    private void write(String mountPath, boolean shuttingDown) throws IOException, ReplicationException {
       long writeStartTimeMs = SystemTime.getInstance().milliseconds();
       File temp = new File(mountPath, replicaTokenFileName + ".tmp");
       File actual = new File(mountPath, replicaTokenFileName);
@@ -698,8 +700,7 @@ public final class ReplicationManager {
      * @param shuttingDown indicates whether this is being called as part of shut down
      */
 
-    private void write(boolean shuttingDown)
-        throws IOException, ReplicationException {
+    private void write(boolean shuttingDown) throws IOException, ReplicationException {
       for (String mountPath : partitionGroupedByMountPath.keySet()) {
         write(mountPath, shuttingDown);
       }

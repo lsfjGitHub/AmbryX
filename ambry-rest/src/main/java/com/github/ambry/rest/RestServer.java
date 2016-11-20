@@ -13,7 +13,11 @@
  */
 package com.github.ambry.rest;
 
-import com.codahale.metrics.*;
+import com.codahale.metrics.Counter;
+import com.codahale.metrics.Gauge;
+import com.codahale.metrics.Histogram;
+import com.codahale.metrics.JmxReporter;
+import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.config.RestServerConfig;
 import com.github.ambry.config.VerifiableProperties;
@@ -21,11 +25,10 @@ import com.github.ambry.notification.NotificationSystem;
 import com.github.ambry.router.Router;
 import com.github.ambry.router.RouterFactory;
 import com.github.ambry.utils.Utils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.io.IOException;
 import java.util.concurrent.CountDownLatch;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -144,8 +147,7 @@ public class RestServer {
    * @throws InstantiationException if there is any error instantiating an instance of RestServer.
    */
   public RestServer(VerifiableProperties verifiableProperties, ClusterMap clusterMap,
-                    NotificationSystem notificationSystem)
-      throws Exception {
+      NotificationSystem notificationSystem) throws Exception {
     if (verifiableProperties == null || clusterMap == null || notificationSystem == null) {
       throw new IllegalArgumentException("Null arg(s) received during instantiation of RestServer");
     }
@@ -159,13 +161,13 @@ public class RestServer {
         Utils.getObj(restServerConfig.restServerRouterFactory, verifiableProperties, clusterMap, notificationSystem);
     router = routerFactory.getRouter();
 
-    RestResponseHandlerFactory restResponseHandlerFactory = Utils
-        .getObj(restServerConfig.restServerResponseHandlerFactory,
+    RestResponseHandlerFactory restResponseHandlerFactory =
+        Utils.getObj(restServerConfig.restServerResponseHandlerFactory,
             restServerConfig.restServerResponseHandlerScalingUnitCount, metricRegistry);
     restResponseHandler = restResponseHandlerFactory.getRestResponseHandler();
 
-    BlobStorageServiceFactory blobStorageServiceFactory = Utils
-        .getObj(restServerConfig.restServerBlobStorageServiceFactory, verifiableProperties, clusterMap,
+    BlobStorageServiceFactory blobStorageServiceFactory =
+        Utils.getObj(restServerConfig.restServerBlobStorageServiceFactory, verifiableProperties, clusterMap,
             restResponseHandler, router);
     blobStorageService = blobStorageServiceFactory.getBlobStorageService();
 
@@ -174,9 +176,9 @@ public class RestServer {
     restRequestHandler = restRequestHandlerFactory.getRestRequestHandler();
     publicAccessLogger = new PublicAccessLogger(restServerConfig.restServerPublicAccessLogRequestHeaders.split(","),
         restServerConfig.restServerPublicAccessLogResponseHeaders.split(","));
-    NioServerFactory nioServerFactory = Utils
-        .getObj(restServerConfig.restServerNioServerFactory, verifiableProperties, metricRegistry, restRequestHandler,
-            publicAccessLogger, restServerState);
+    NioServerFactory nioServerFactory =
+        Utils.getObj(restServerConfig.restServerNioServerFactory, verifiableProperties, metricRegistry,
+            restRequestHandler, publicAccessLogger, restServerState);
     nioServer = nioServerFactory.getNioServer();
     if (router == null || restResponseHandler == null || blobStorageService == null || restRequestHandler == null
         || nioServer == null) {
@@ -189,8 +191,7 @@ public class RestServer {
    * Starts up all the components required. Returns when startup is FULLY complete.
    * @throws InstantiationException if the RestServer is unable to start.
    */
-  public void start()
-      throws InstantiationException {
+  public void start() throws InstantiationException {
     logger.info("Starting RestServer");
     long startupBeginTime = System.currentTimeMillis();
     try {
@@ -291,8 +292,7 @@ public class RestServer {
    * Wait for shutdown to be triggered and for it to complete.
    * @throws InterruptedException if the wait for shutdown is interrupted.
    */
-  public void awaitShutdown()
-      throws InterruptedException {
+  public void awaitShutdown() throws InterruptedException {
     shutdownLatch.await();
   }
 }

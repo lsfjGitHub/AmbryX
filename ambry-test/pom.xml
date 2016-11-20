@@ -38,12 +38,6 @@
         </dependency>
         <dependency>
             <groupId>com.github.ambry</groupId>
-            <artifactId>ambry-metrics</artifactId>
-            <version>${project.version}</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>com.github.ambry</groupId>
             <artifactId>ambry-store</artifactId>
             <version>${project.version}</version>
             <scope>test</scope>

@@ -14,6 +14,7 @@
 package com.github.ambry.network;
 
 import com.codahale.metrics.MetricRegistry;
+import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ConnectionPoolConfig;
 import com.github.ambry.config.NetworkConfig;
 import com.github.ambry.config.SSLConfig;
@@ -46,6 +47,8 @@ public class BlockingChannelConnectionPoolTest {
   private static File trustStoreFile = null;
   private static SSLFactory sslFactory;
   private static SSLConfig sslConfig;
+  private static ClusterMapConfig plainTextClusterMapConfig;
+  private static ClusterMapConfig sslEnabledClusterMapConfig;
   private static SSLConfig serverSSLConfig1;
   private static SSLConfig serverSSLConfig2;
   private static SSLConfig serverSSLConfig3;
@@ -55,20 +58,25 @@ public class BlockingChannelConnectionPoolTest {
    * Run only once for all tests
    */
   @BeforeClass
-  public static void initializeTests()
-      throws Exception {
+  public static void initializeTests() throws Exception {
     trustStoreFile = File.createTempFile("truststore", ".jks");
-    serverSSLConfig1 = TestSSLUtils.createSSLConfig("DC2,DC3", SSLFactory.Mode.SERVER, trustStoreFile, "server1");
-    serverSSLConfig2 = TestSSLUtils.createSSLConfig("DC1,DC3", SSLFactory.Mode.SERVER, trustStoreFile, "server2");
-    serverSSLConfig3 = TestSSLUtils.createSSLConfig("DC1,DC2", SSLFactory.Mode.SERVER, trustStoreFile, "server3");
-    sslConfig = TestSSLUtils.createSSLConfig("DC1,DC2,DC3", SSLFactory.Mode.CLIENT, trustStoreFile, "client");
+    serverSSLConfig1 =
+        new SSLConfig(TestSSLUtils.createSslProps("DC2,DC3", SSLFactory.Mode.SERVER, trustStoreFile, "server1"));
+    serverSSLConfig2 =
+        new SSLConfig(TestSSLUtils.createSslProps("DC1,DC3", SSLFactory.Mode.SERVER, trustStoreFile, "server2"));
+    serverSSLConfig3 =
+        new SSLConfig(TestSSLUtils.createSslProps("DC1,DC2", SSLFactory.Mode.SERVER, trustStoreFile, "server3"));
+    VerifiableProperties sslClientProps =
+        TestSSLUtils.createSslProps("DC1,DC2,DC3", SSLFactory.Mode.CLIENT, trustStoreFile, "client");
+    sslConfig = new SSLConfig(sslClientProps);
+    sslEnabledClusterMapConfig = new ClusterMapConfig(sslClientProps);
+    plainTextClusterMapConfig = new ClusterMapConfig(new VerifiableProperties(new Properties()));
     sslFactory = new SSLFactory(sslConfig);
     SSLContext sslContext = sslFactory.getSSLContext();
     sslSocketFactory = sslContext.getSocketFactory();
   }
 
-  public BlockingChannelConnectionPoolTest()
-      throws Exception {
+  public BlockingChannelConnectionPoolTest() throws Exception {
     Properties props = new Properties();
     props.setProperty("port", "6667");
     VerifiableProperties propverify = new VerifiableProperties(props);
@@ -145,14 +153,12 @@ public class BlockingChannelConnectionPoolTest {
   }
 
   //@Test
-  public void testBlockingChannelInfoForPlainText()
-      throws Exception {
+  public void testBlockingChannelInfoForPlainText() throws Exception {
     testBlockingChannelInfo("127.0.0.1", new Port(6667, PortType.PLAINTEXT), 5, 5);
   }
 
   @Test
-  public void testBlockingChannelInfoForSSL()
-      throws Exception {
+  public void testBlockingChannelInfoForSSL() throws Exception {
     testBlockingChannelInfo("127.0.0.1", new Port(7667, PortType.SSL), 5, 5);
   }
 
@@ -160,8 +166,7 @@ public class BlockingChannelConnectionPoolTest {
    * Tests how connection failures are handled by BlockingChannelInfo.
    */
   @Test
-  public void testConnectionFailureCases()
-      throws InterruptedException, ConnectionPoolTimeoutException, IOException {
+  public void testConnectionFailureCases() throws InterruptedException, ConnectionPoolTimeoutException, IOException {
     int port = 6680;
     String host = "127.0.0.1";
     SocketServer server = startServer(port);
@@ -205,8 +210,7 @@ public class BlockingChannelConnectionPoolTest {
   }
 
   private void testBlockingChannelInfo(String host, Port port, int maxConnectionsPerPortPlainText,
-      int maxConnectionsPerPortSSL)
-      throws Exception {
+      int maxConnectionsPerPortSSL) throws Exception {
     Properties props = new Properties();
     props.put("connectionpool.max.connections.per.port.plain.text", "" + maxConnectionsPerPortPlainText);
     props.put("connectionpool.max.connections.per.port.ssl", "" + maxConnectionsPerPortSSL);
@@ -231,8 +235,7 @@ public class BlockingChannelConnectionPoolTest {
   }
 
   private void overSubscriptionTest(Properties props, String host, Port port, int maxConnectionsPerHost,
-      boolean destroyConnection)
-      throws Exception {
+      boolean destroyConnection) throws Exception {
     AtomicReference<Exception> exception = new AtomicReference<Exception>();
     BlockingChannelInfo channelInfo =
         new BlockingChannelInfo(new ConnectionPoolConfig(new VerifiableProperties(props)), host, port,
@@ -303,8 +306,7 @@ public class BlockingChannelConnectionPoolTest {
    * @throws IOException
    * @throws InterruptedException
    */
-  private SocketServer startServer(int port)
-      throws IOException, InterruptedException {
+  private SocketServer startServer(int port) throws IOException, InterruptedException {
     Properties props = new Properties();
     props.setProperty("port", "" + port);
     VerifiableProperties propverify = new VerifiableProperties(props);
@@ -370,14 +372,13 @@ public class BlockingChannelConnectionPoolTest {
   }
 
   @Test
-  public void testBlockingChannelConnectionPool()
-      throws Exception {
+  public void testBlockingChannelConnectionPool() throws Exception {
     Properties props = new Properties();
     props.put("connectionpool.max.connections.per.port.plain.text", "5");
     props.put("connectionpool.max.connections.per.port.ssl", "5");
     ConnectionPool connectionPool =
         new BlockingChannelConnectionPool(new ConnectionPoolConfig(new VerifiableProperties(props)), sslConfig,
-            new MetricRegistry());
+            plainTextClusterMapConfig, new MetricRegistry());
     connectionPool.start();
 
     CountDownLatch shouldRelease = new CountDownLatch(1);
@@ -415,14 +416,13 @@ public class BlockingChannelConnectionPoolTest {
   }
 
   //@Test
-  public void testSSLBlockingChannelConnectionPool()
-      throws Exception {
+  public void testSSLBlockingChannelConnectionPool() throws Exception {
     Properties props = new Properties();
     props.put("connectionpool.max.connections.per.port.plain.text", "5");
     props.put("connectionpool.max.connections.per.port.ssl", "5");
     ConnectionPool connectionPool =
         new BlockingChannelConnectionPool(new ConnectionPoolConfig(new VerifiableProperties(props)), sslConfig,
-            new MetricRegistry());
+            sslEnabledClusterMapConfig, new MetricRegistry());
     connectionPool.start();
 
     CountDownLatch shouldRelease = new CountDownLatch(1);
@@ -460,8 +460,7 @@ public class BlockingChannelConnectionPoolTest {
   }
 
   private void awaitCountdown(CountDownLatch countDownLatch, long timeoutMs, AtomicReference<Exception> exception,
-      String errMsg)
-      throws Exception {
+      String errMsg) throws Exception {
     if (!countDownLatch.await(timeoutMs, TimeUnit.MILLISECONDS)) {
       if (exception.get() == null) {
         exception.set(new Exception(errMsg));

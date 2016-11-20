@@ -16,7 +16,6 @@ package com.github.ambry.protocol;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.store.FindTokenFactory;
 import com.github.ambry.utils.Utils;
-
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -38,7 +37,7 @@ public class ReplicaMetadataRequest extends RequestOrResponse {
   private static final short Replica_Metadata_Request_Version_V1 = 1;
 
   public ReplicaMetadataRequest(int correlationId, String clientId,
-                                List<ReplicaMetadataRequestInfo> replicaMetadataRequestInfoList, long maxTotalSizeOfEntriesInBytes) {
+      List<ReplicaMetadataRequestInfo> replicaMetadataRequestInfoList, long maxTotalSizeOfEntriesInBytes) {
     super(RequestOrResponseType.ReplicaMetadataRequest, Replica_Metadata_Request_Version_V1, correlationId, clientId);
     if (replicaMetadataRequestInfoList == null) {
       throw new IllegalArgumentException("replicaMetadataRequestInfoList cannot be null");
@@ -79,8 +78,7 @@ public class ReplicaMetadataRequest extends RequestOrResponse {
   }
 
   @Override
-  public long writeTo(WritableByteChannel channel)
-      throws IOException {
+  public long writeTo(WritableByteChannel channel) throws IOException {
     if (bufferToSend == null) {
       bufferToSend = ByteBuffer.allocate((int) sizeInBytes());
       writeHeader();
@@ -101,8 +99,8 @@ public class ReplicaMetadataRequest extends RequestOrResponse {
 
   @Override
   public long sizeInBytes() {
-    return super.sizeInBytes() + Replica_Metadata_Request_Info_List_Size_In_Bytes +
-        replicaMetadataRequestInfoListSizeInBytes + Max_Entries_Size_In_Bytes;
+    return super.sizeInBytes() + Replica_Metadata_Request_Info_List_Size_In_Bytes
+        + replicaMetadataRequestInfoListSizeInBytes + Max_Entries_Size_In_Bytes;
   }
 
   @Override

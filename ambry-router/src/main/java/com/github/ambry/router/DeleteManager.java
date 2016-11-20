@@ -27,15 +27,14 @@ import com.github.ambry.protocol.DeleteResponse;
 import com.github.ambry.protocol.RequestOrResponse;
 import com.github.ambry.utils.ByteBufferInputStream;
 import com.github.ambry.utils.Time;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.io.DataInputStream;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -64,8 +63,8 @@ class DeleteManager {
     @Override
     public void registerRequestToSend(DeleteOperation deleteOperation, RequestInfo requestInfo) {
       requestListToFill.add(requestInfo);
-      correlationIdToDeleteOperation
-          .put(((RequestOrResponse) requestInfo.getRequest()).getCorrelationId(), deleteOperation);
+      correlationIdToDeleteOperation.put(((RequestOrResponse) requestInfo.getRequest()).getCorrelationId(),
+          deleteOperation);
     }
   }
 
@@ -83,8 +82,8 @@ class DeleteManager {
    * @param time The {@link Time} instance to use.
    */
   DeleteManager(ClusterMap clusterMap, ResponseHandler responseHandler, NotificationSystem notificationSystem,
-                RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics,
-                OperationCompleteCallback operationCompleteCallback, Time time) {
+      RouterConfig routerConfig, NonBlockingRouterMetrics routerMetrics,
+      OperationCompleteCallback operationCompleteCallback, Time time) {
     this.clusterMap = clusterMap;
     this.responseHandler = responseHandler;
     this.notificationSystem = notificationSystem;
@@ -214,8 +213,8 @@ class DeleteManager {
     }
     routerMetrics.operationDequeuingRate.mark();
     routerMetrics.deleteBlobOperationLatencyMs.update(time.milliseconds() - op.getSubmissionTimeMs());
-    operationCompleteCallback
-        .completeOperation(op.getFutureResult(), op.getCallback(), op.getOperationResult(), op.getOperationException());
+    operationCompleteCallback.completeOperation(op.getFutureResult(), op.getCallback(), op.getOperationResult(),
+        op.getOperationException());
   }
 
   /**

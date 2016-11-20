@@ -21,24 +21,54 @@ import com.github.ambry.router.AsyncWritableChannel;
 import com.github.ambry.router.Callback;
 import com.github.ambry.router.FutureResult;
 import com.github.ambry.utils.Utils;
-import io.netty.buffer.*;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.ByteBufAllocator;
+import io.netty.buffer.CompositeByteBuf;
+import io.netty.buffer.Unpooled;
+import io.netty.buffer.UnpooledByteBufAllocator;
+import io.netty.buffer.UnpooledHeapByteBuf;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelConfig;
 import io.netty.channel.DefaultChannelConfig;
 import io.netty.channel.embedded.EmbeddedChannel;
-import io.netty.handler.codec.http.*;
-import org.junit.Assert;
-import org.junit.Test;
-
+import io.netty.handler.codec.http.Cookie;
+import io.netty.handler.codec.http.DefaultCookie;
+import io.netty.handler.codec.http.DefaultHttpContent;
+import io.netty.handler.codec.http.DefaultHttpHeaders;
+import io.netty.handler.codec.http.DefaultHttpRequest;
+import io.netty.handler.codec.http.DefaultLastHttpContent;
+import io.netty.handler.codec.http.HttpContent;
+import io.netty.handler.codec.http.HttpHeaders;
+import io.netty.handler.codec.http.HttpMethod;
+import io.netty.handler.codec.http.HttpRequest;
+import io.netty.handler.codec.http.HttpVersion;
+import io.netty.handler.codec.http.LastHttpContent;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.util.*;
-import java.util.concurrent.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
+import java.util.Queue;
+import java.util.Random;
+import java.util.Set;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import org.junit.Assert;
+import org.junit.Test;
 
 import static org.junit.Assert.*;
 
@@ -65,8 +95,7 @@ public class NettyRequestTest {
    * @throws RestServiceException
    */
   @Test
-  public void conversionWithGoodInputTest()
-      throws RestServiceException {
+  public void conversionWithGoodInputTest() throws RestServiceException {
     // headers
     HttpHeaders headers = new DefaultHttpHeaders(false);
     headers.add(HttpHeaders.Names.CONTENT_LENGTH, new Random().nextInt(Integer.MAX_VALUE));
@@ -150,8 +179,7 @@ public class NettyRequestTest {
    * @throws RestServiceException
    */
   @Test
-  public void conversionWithBadInputTest()
-      throws RestServiceException {
+  public void conversionWithBadInputTest() throws RestServiceException {
     HttpRequest httpRequest = new DefaultHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.GET, "");
     // HttpRequest null.
     try {
@@ -196,8 +224,7 @@ public class NettyRequestTest {
    * @throws Exception
    */
   @Test
-  public void operationsAfterCloseTest()
-      throws Exception {
+  public void operationsAfterCloseTest() throws Exception {
     Channel channel = new MockChannel();
     int expectedMaxMessagesPerRead = channel.config().getMaxMessagesPerRead();
     NettyRequest nettyRequest = createNettyRequest(HttpMethod.POST, "/", null, channel);
@@ -235,8 +262,7 @@ public class NettyRequestTest {
    * @throws Exception
    */
   @Test
-  public void contentAddAndReadTest()
-      throws Exception {
+  public void contentAddAndReadTest() throws Exception {
     String[] digestAlgorithms = {"", "MD5", "SHA-1", "SHA-256"};
     for (String digestAlgorithm : digestAlgorithms) {
       contentAddAndReadTest(digestAlgorithm, true);
@@ -251,8 +277,7 @@ public class NettyRequestTest {
    * @throws Exception
    */
   @Test
-  public void backPressureTest()
-      throws Exception {
+  public void backPressureTest() throws Exception {
     String[] digestAlgorithms = {"", "MD5", "SHA-1", "SHA-256"};
     for (String digestAlgorithm : digestAlgorithms) {
       backPressureTest(digestAlgorithm, true);
@@ -266,8 +291,7 @@ public class NettyRequestTest {
    * @throws Exception
    */
   @Test
-  public void readIntoExceptionsTest()
-      throws Exception {
+  public void readIntoExceptionsTest() throws Exception {
     Channel channel = new MockChannel();
     int expectedMaxMessagesPerRead = channel.config().getMaxMessagesPerRead();
     // try to call readInto twice.
@@ -373,8 +397,7 @@ public class NettyRequestTest {
    * @throws RestServiceException
    */
   @Test
-  public void closeTest()
-      throws RestServiceException {
+  public void closeTest() throws RestServiceException {
     Channel channel = new MockChannel();
     int expectedMaxMessagesPerRead = channel.config().getMaxMessagesPerRead();
     NettyRequest nettyRequest = createNettyRequest(HttpMethod.POST, "/", null, channel);
@@ -397,8 +420,7 @@ public class NettyRequestTest {
    * @throws RestServiceException
    */
   @Test
-  public void addContentForGetTest()
-      throws RestServiceException {
+  public void addContentForGetTest() throws RestServiceException {
     byte[] content = RestTestUtils.getRandomBytes(16);
     // adding non LastHttpContent to nettyRequest
     NettyRequest nettyRequest = createNettyRequest(HttpMethod.GET, "/", null, new MockChannel());
@@ -434,8 +456,7 @@ public class NettyRequestTest {
   }
 
   @Test
-  public void keepAliveTest()
-      throws RestServiceException {
+  public void keepAliveTest() throws RestServiceException {
     NettyRequest request = createNettyRequest(HttpMethod.GET, "/", null, new MockChannel());
     // by default, keep-alive is true for HTTP 1.1
     assertTrue("Keep-alive not as expected", request.isKeepAlive());
@@ -456,8 +477,7 @@ public class NettyRequestTest {
    * @throws RestServiceException
    */
   @Test
-  public void sizeTest()
-      throws RestServiceException {
+  public void sizeTest() throws RestServiceException {
     // no length headers provided.
     NettyRequest nettyRequest = createNettyRequest(HttpMethod.GET, "/", null, new MockChannel());
     assertEquals("Size not as expected", -1, nettyRequest.getSize());
@@ -491,8 +511,7 @@ public class NettyRequestTest {
    * @throws Exception
    */
   @Test
-  public void zeroSizeContentTest()
-      throws Exception {
+  public void zeroSizeContentTest() throws Exception {
     Channel channel = new MockChannel();
     int expectedMaxMessagesPerRead = channel.config().getMaxMessagesPerRead();
     NettyRequest nettyRequest = createNettyRequest(HttpMethod.POST, "/", null, channel);
@@ -523,8 +542,7 @@ public class NettyRequestTest {
    * @throws Exception
    */
   @Test
-  public void headerAndContentSizeMismatchTest()
-      throws Exception {
+  public void headerAndContentSizeMismatchTest() throws Exception {
     sizeInHeaderMoreThanContentTest();
     sizeInHeaderLessThanContentTest();
   }
@@ -533,8 +551,7 @@ public class NettyRequestTest {
    * Does any left over tests for {@link NettyRequest.ContentWriteCallback}
    */
   @Test
-  public void contentWriteCallbackTests()
-      throws RestServiceException {
+  public void contentWriteCallbackTests() throws RestServiceException {
     ReadIntoCallback readIntoCallback = new ReadIntoCallback();
     NettyRequest nettyRequest = createNettyRequest(HttpMethod.GET, "/", null, new MockChannel());
     NettyRequest.ReadIntoCallbackWrapper wrapper = nettyRequest.new ReadIntoCallbackWrapper(readIntoCallback);
@@ -551,8 +568,7 @@ public class NettyRequestTest {
    * @throws RestServiceException
    */
   @Test
-  public void digestIncorrectUsageTest()
-      throws NoSuchAlgorithmException, RestServiceException {
+  public void digestIncorrectUsageTest() throws NoSuchAlgorithmException, RestServiceException {
     setDigestAfterReadTest();
     setBadAlgorithmTest();
     getDigestWithoutSettingAlgorithmTest();
@@ -629,9 +645,9 @@ public class NettyRequestTest {
    * @param expectedMaxMessagesPerRead the expected value of {@link ChannelConfig#getMaxMessagesPerRead()}.
    */
   private void validateRequest(NettyRequest nettyRequest, RestMethod restMethod, String uri, HttpHeaders headers,
-                               Map<String, List<String>> params, Set<Cookie> httpCookies, Channel channel, int expectedMaxMessagesPerRead) {
-    long contentLength = headers.contains(HttpHeaders.Names.CONTENT_LENGTH) ? Long
-        .parseLong(headers.get(HttpHeaders.Names.CONTENT_LENGTH)) : 0;
+      Map<String, List<String>> params, Set<Cookie> httpCookies, Channel channel, int expectedMaxMessagesPerRead) {
+    long contentLength = headers.contains(HttpHeaders.Names.CONTENT_LENGTH) ? Long.parseLong(
+        headers.get(HttpHeaders.Names.CONTENT_LENGTH)) : 0;
     assertTrue("Request channel is not open", nettyRequest.isOpen());
     assertEquals("Mismatch in content length", contentLength, nettyRequest.getSize());
     assertEquals("Mismatch in rest method", restMethod, nettyRequest.getRestMethod());
@@ -730,8 +746,7 @@ public class NettyRequestTest {
    *                              {@link ByteBuf}.
    * @throws Exception
    */
-  private void contentAddAndReadTest(String digestAlgorithm, boolean useCopyForcingByteBuf)
-      throws Exception {
+  private void contentAddAndReadTest(String digestAlgorithm, boolean useCopyForcingByteBuf) throws Exception {
     // non composite content
     // start reading before addition of content
     List<HttpContent> httpContents = new ArrayList<>();
@@ -766,8 +781,7 @@ public class NettyRequestTest {
    * @throws Exception
    */
   private void doContentAddAndReadTest(String digestAlgorithm, ByteBuffer content, List<HttpContent> httpContents,
-                                       int numChunksToAddBeforeRead)
-      throws Exception {
+      int numChunksToAddBeforeRead) throws Exception {
     if (numChunksToAddBeforeRead < 0 || numChunksToAddBeforeRead > httpContents.size()) {
       throw new IllegalArgumentException("Illegal value of numChunksToAddBeforeRead");
     }
@@ -832,8 +846,7 @@ public class NettyRequestTest {
    *                              {@link ByteBuf}.
    * @throws Exception
    */
-  private void backPressureTest(String digestAlgorithm, boolean useCopyForcingByteBuf)
-      throws Exception {
+  private void backPressureTest(String digestAlgorithm, boolean useCopyForcingByteBuf) throws Exception {
     List<HttpContent> httpContents = new ArrayList<HttpContent>();
     byte[] contentBytes = RestTestUtils.getRandomBytes(GENERATED_CONTENT_SIZE);
     ByteBuffer content = ByteBuffer.wrap(contentBytes);
@@ -875,8 +888,7 @@ public class NettyRequestTest {
    * @throws Exception
    */
   private void doBackPressureTest(String digestAlgorithm, ByteBuffer content, List<HttpContent> httpContents,
-                                  int numChunksToAddBeforeRead)
-      throws Exception {
+      int numChunksToAddBeforeRead) throws Exception {
     if (numChunksToAddBeforeRead < 0 || numChunksToAddBeforeRead > httpContents.size()) {
       throw new IllegalArgumentException("Illegal value of numChunksToAddBeforeRead");
     }
@@ -959,7 +971,7 @@ public class NettyRequestTest {
 
   /**
    * Generates random content and fills it up (in parts) in {@code httpContents}.
-   * @param httpContents the {@link List <HttpContent>} that will contain all the content in parts.
+   * @param httpContents the {@link List<HttpContent>} that will contain all the content in parts.
    * @return the whole content as a {@link ByteBuffer} - serves as a source of truth.
    */
   private ByteBuffer generateContent(List<HttpContent> httpContents) {
@@ -968,7 +980,7 @@ public class NettyRequestTest {
 
   /**
    * Generates random content and fills it up (in parts) in {@code httpContents}.
-   * @param httpContents the {@link List <HttpContent>} that will contain all the content in parts.
+   * @param httpContents the {@link List<HttpContent>} that will contain all the content in parts.
    * @param useCopyForcingByteBuf if {@code true}, uses {@link CopyForcingByteBuf} instead of the default
    *                              {@link ByteBuf}.
    * @return the whole content as a {@link ByteBuffer} - serves as a source of truth.
@@ -983,7 +995,7 @@ public class NettyRequestTest {
    * Splits the given {@code contentBytes} into {@code numChunks} chunks and stores them in {@code httpContents}.
    * @param contentBytes the content that needs to be split.
    * @param numChunks the number of chunks to split {@code contentBytes} into.
-   * @param httpContents the {@link List <HttpContent>} that will contain all the content in parts.
+   * @param httpContents the {@link List<HttpContent>} that will contain all the content in parts.
    * @param useCopyForcingByteBuf if {@code true}, uses {@link CopyForcingByteBuf} instead of the default
    *                              {@link ByteBuf}.
    */
@@ -1011,7 +1023,7 @@ public class NettyRequestTest {
 
   /**
    * Generates random content and fills it up in {@code httpContents} with a backing {@link CompositeByteBuf}.
-   * @param httpContents the {@link List <HttpContent>} that will contain all the content.
+   * @param httpContents the {@link List<HttpContent>} that will contain all the content.
    * @return the whole content as a {@link ByteBuffer} - serves as a source of truth.
    */
   private ByteBuffer generateCompositeContent(List<HttpContent> httpContents) {
@@ -1027,7 +1039,7 @@ public class NettyRequestTest {
 
   /**
    * Verifies that the reference counts of {@code httpContents} is undisturbed after all operations.
-   * @param httpContents the {@link List <HttpContent>} of contents whose reference counts need to checked.
+   * @param httpContents the {@link List<HttpContent>} of contents whose reference counts need to checked.
    */
   private void verifyRefCnts(List<HttpContent> httpContents) {
     for (HttpContent httpContent : httpContents) {
@@ -1066,8 +1078,7 @@ public class NettyRequestTest {
    * Tests reaction of NettyRequest when content size is less than the size specified in the headers.
    * @throws Exception
    */
-  private void sizeInHeaderMoreThanContentTest()
-      throws Exception {
+  private void sizeInHeaderMoreThanContentTest() throws Exception {
     List<HttpContent> httpContents = new ArrayList<HttpContent>();
     ByteBuffer content = generateContent(httpContents);
     HttpHeaders httpHeaders = new DefaultHttpHeaders();
@@ -1079,8 +1090,7 @@ public class NettyRequestTest {
    * Tests reaction of NettyRequest when content size is more than the size specified in the headers.
    * @throws Exception
    */
-  private void sizeInHeaderLessThanContentTest()
-      throws Exception {
+  private void sizeInHeaderLessThanContentTest() throws Exception {
     List<HttpContent> httpContents = new ArrayList<HttpContent>();
     ByteBuffer content = generateContent(httpContents);
     HttpHeaders httpHeaders = new DefaultHttpHeaders();
@@ -1092,7 +1102,7 @@ public class NettyRequestTest {
   /**
    * Tests reaction of NettyRequest when content size is different from the size specified in the headers.
    * @param httpHeaders {@link HttpHeaders} that need to be a part of the request.
-   * @param httpContents the {@link List <HttpContent>} that needs to be added to {@code nettyRequest}.
+   * @param httpContents the {@link List<HttpContent>} that needs to be added to {@code nettyRequest}.
    * @throws Exception
    */
   private void doHeaderAndContentSizeMismatchTest(HttpHeaders httpHeaders, List<HttpContent> httpContents)
@@ -1151,8 +1161,7 @@ public class NettyRequestTest {
    * @throws NoSuchAlgorithmException
    * @throws RestServiceException
    */
-  private void setDigestAfterReadTest()
-      throws NoSuchAlgorithmException, RestServiceException {
+  private void setDigestAfterReadTest() throws NoSuchAlgorithmException, RestServiceException {
     List<HttpContent> httpContents = new ArrayList<HttpContent>();
     generateContent(httpContents);
     Channel channel = new MockChannel();
@@ -1177,8 +1186,7 @@ public class NettyRequestTest {
    * Tests for failure when {@link NettyRequest#setDigestAlgorithm(String)} is called with an unrecognized algorithm.
    * @throws RestServiceException
    */
-  private void setBadAlgorithmTest()
-      throws RestServiceException {
+  private void setBadAlgorithmTest() throws RestServiceException {
     List<HttpContent> httpContents = new ArrayList<HttpContent>();
     generateContent(httpContents);
     Channel channel = new MockChannel();
@@ -1198,8 +1206,7 @@ public class NettyRequestTest {
    * {@link NettyRequest#setDigestAlgorithm(String)}.
    * @throws RestServiceException
    */
-  private void getDigestWithoutSettingAlgorithmTest()
-      throws RestServiceException {
+  private void getDigestWithoutSettingAlgorithmTest() throws RestServiceException {
     List<HttpContent> httpContents = new ArrayList<HttpContent>();
     generateContent(httpContents);
     Channel channel = new MockChannel();
@@ -1223,8 +1230,7 @@ public class NettyRequestTest {
    * @throws NoSuchAlgorithmException
    * @throws RestServiceException
    */
-  private void getDigestBeforeAllContentProcessedTest()
-      throws NoSuchAlgorithmException, RestServiceException {
+  private void getDigestBeforeAllContentProcessedTest() throws NoSuchAlgorithmException, RestServiceException {
     // all content not added test.
     List<HttpContent> httpContents = new ArrayList<HttpContent>();
     generateContent(httpContents);
@@ -1293,8 +1299,7 @@ class ReadIntoCallback implements Callback<Long> {
    * @throws InterruptedException if there was any intteruption while waiting for the callback.
    * @throws TimeoutException if the callback did not arrive within a particular timeout.
    */
-  public void awaitCallback()
-      throws InterruptedException, TimeoutException {
+  public void awaitCallback() throws InterruptedException, TimeoutException {
     if (!latch.await(1, TimeUnit.SECONDS)) {
       throw new TimeoutException("Timed out waiting for callback to trigger");
     }
@@ -1331,8 +1336,7 @@ class BadAsyncWritableChannel implements AsyncWritableChannel {
   }
 
   @Override
-  public void close()
-      throws IOException {
+  public void close() throws IOException {
     isOpen.set(false);
   }
 

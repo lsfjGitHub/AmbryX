@@ -16,7 +16,6 @@ package com.github.ambry.protocol;
 import com.github.ambry.clustermap.ClusterMap;
 import com.github.ambry.messageformat.MessageFormatFlags;
 import com.github.ambry.utils.Utils;
-
 import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -31,22 +30,22 @@ import java.util.List;
 public class GetRequest extends RequestOrResponse {
 
   private MessageFormatFlags flags;
-  private GetOptions getOptions;
+  private GetOption getOption;
   private List<PartitionRequestInfo> partitionRequestInfoList;
   private int sizeSent;
   private int totalPartitionRequestInfoListSize;
 
   private static final int MessageFormat_Size_In_Bytes = 2;
-  private static final int GetOptions_Size_In_Bytes = 2;
+  private static final int GetOption_Size_In_Bytes = 2;
   private static final int Partition_Request_Info_List_Size = 4;
   private static final short Get_Request_Version_V2 = 2;
 
   public GetRequest(int correlationId, String clientId, MessageFormatFlags flags,
-                    List<PartitionRequestInfo> partitionRequestInfoList, GetOptions getOptions) {
+      List<PartitionRequestInfo> partitionRequestInfoList, GetOption getOption) {
     super(RequestOrResponseType.GetRequest, Get_Request_Version_V2, correlationId, clientId);
 
     this.flags = flags;
-    this.getOptions = getOptions;
+    this.getOption = getOption;
     if (partitionRequestInfoList == null) {
       throw new IllegalArgumentException("No partition info specified in GetRequest");
     }
@@ -65,12 +64,11 @@ public class GetRequest extends RequestOrResponse {
     return partitionRequestInfoList;
   }
 
-  public GetOptions getGetOptions() {
-    return getOptions;
+  public GetOption getGetOption() {
+    return getOption;
   }
 
-  public static GetRequest readFrom(DataInputStream stream, ClusterMap clusterMap)
-      throws IOException {
+  public static GetRequest readFrom(DataInputStream stream, ClusterMap clusterMap) throws IOException {
     RequestOrResponseType type = RequestOrResponseType.GetRequest;
     Short versionId = stream.readShort();
     int correlationId = stream.readInt();
@@ -83,17 +81,16 @@ public class GetRequest extends RequestOrResponse {
       PartitionRequestInfo partitionRequestInfo = PartitionRequestInfo.readFrom(stream, clusterMap);
       partitionRequestInfoList.add(partitionRequestInfo);
     }
-    GetOptions getOption = GetOptions.None;
+    GetOption getOption = GetOption.None;
     if (versionId == Get_Request_Version_V2) {
-      getOption = GetOptions.values()[stream.readShort()];
+      getOption = GetOption.values()[stream.readShort()];
     }
     // ignore version for now
     return new GetRequest(correlationId, clientId, messageType, partitionRequestInfoList, getOption);
   }
 
   @Override
-  public long writeTo(WritableByteChannel channel)
-      throws IOException {
+  public long writeTo(WritableByteChannel channel) throws IOException {
     long written = 0;
     if (bufferToSend == null) {
       bufferToSend = ByteBuffer.allocate((int) sizeInBytes());
@@ -103,7 +100,7 @@ public class GetRequest extends RequestOrResponse {
       for (PartitionRequestInfo partitionRequestInfo : partitionRequestInfoList) {
         partitionRequestInfo.writeTo(bufferToSend);
       }
-      bufferToSend.putShort((short) getOptions.ordinal());
+      bufferToSend.putShort((short) getOption.ordinal());
       bufferToSend.flip();
     }
     if (bufferToSend.remaining() > 0) {
@@ -121,8 +118,8 @@ public class GetRequest extends RequestOrResponse {
   @Override
   public long sizeInBytes() {
     // header + message format size + partition request info size + total partition request info list size
-    return super.sizeInBytes() + MessageFormat_Size_In_Bytes +
-        Partition_Request_Info_List_Size + totalPartitionRequestInfoListSize + GetOptions_Size_In_Bytes;
+    return super.sizeInBytes() + MessageFormat_Size_In_Bytes + Partition_Request_Info_List_Size
+        + totalPartitionRequestInfoListSize + GetOption_Size_In_Bytes;
   }
 
   @Override
@@ -135,7 +132,7 @@ public class GetRequest extends RequestOrResponse {
     sb.append(", ").append("ClientId=").append(clientId);
     sb.append(", ").append("CorrelationId=").append(correlationId);
     sb.append(", ").append("MessageFormatFlags=").append(flags);
-    sb.append(", ").append("GetOptions=").append(getOptions);
+    sb.append(", ").append("GetOption=").append(getOption);
     sb.append("]");
     return sb.toString();
   }

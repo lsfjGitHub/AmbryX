@@ -13,26 +13,40 @@
  */
 package com.github.ambry.tools.perf.rest;
 
-import com.codahale.metrics.*;
+import com.codahale.metrics.Counter;
+import com.codahale.metrics.Histogram;
+import com.codahale.metrics.JmxReporter;
+import com.codahale.metrics.Meter;
+import com.codahale.metrics.MetricRegistry;
+import com.codahale.metrics.Snapshot;
 import com.github.ambry.rest.RestUtils;
 import com.github.ambry.utils.Time;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
-import io.netty.channel.*;
+import io.netty.channel.ChannelFuture;
+import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.ChannelInitializer;
+import io.netty.channel.EventLoopGroup;
+import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.channel.socket.nio.NioSocketChannel;
-import io.netty.handler.codec.http.*;
+import io.netty.handler.codec.http.DefaultFullHttpRequest;
+import io.netty.handler.codec.http.DefaultHttpRequest;
+import io.netty.handler.codec.http.HttpChunkedInput;
+import io.netty.handler.codec.http.HttpClientCodec;
+import io.netty.handler.codec.http.HttpContent;
+import io.netty.handler.codec.http.HttpHeaders;
+import io.netty.handler.codec.http.HttpMethod;
+import io.netty.handler.codec.http.HttpObject;
+import io.netty.handler.codec.http.HttpRequest;
+import io.netty.handler.codec.http.HttpResponse;
+import io.netty.handler.codec.http.HttpVersion;
+import io.netty.handler.codec.http.LastHttpContent;
 import io.netty.handler.stream.ChunkedInput;
 import io.netty.handler.stream.ChunkedWriteHandler;
 import io.netty.util.concurrent.GenericFutureListener;
-import joptsimple.ArgumentAcceptingOptionSpec;
-import joptsimple.OptionParser;
-import joptsimple.OptionSet;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import java.util.Arrays;
 import java.util.List;
 import java.util.Random;
@@ -40,6 +54,11 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import joptsimple.ArgumentAcceptingOptionSpec;
+import joptsimple.OptionParser;
+import joptsimple.OptionSet;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 
 /**
@@ -88,27 +107,42 @@ public class NettyPerfClient {
      */
     protected ClientArgs(String args[]) {
       OptionParser parser = new OptionParser();
-      ArgumentAcceptingOptionSpec<String> host =
-          parser.accepts("host", "Front end host to contact").withOptionalArg().describedAs("host").ofType(String.class)
-              .defaultsTo("localhost");
-      ArgumentAcceptingOptionSpec<Integer> port =
-          parser.accepts("port", "Front end port").withOptionalArg().describedAs("port").ofType(Integer.class)
-              .defaultsTo(1174);
-      ArgumentAcceptingOptionSpec<String> path =
-          parser.accepts("path", "Resource path (prefix with a '/')").withOptionalArg().describedAs("path")
-              .ofType(String.class).defaultsTo("/");
+      ArgumentAcceptingOptionSpec<String> host = parser.accepts("host", "Front end host to contact")
+          .withOptionalArg()
+          .describedAs("host")
+          .ofType(String.class)
+          .defaultsTo("localhost");
+      ArgumentAcceptingOptionSpec<Integer> port = parser.accepts("port", "Front end port")
+          .withOptionalArg()
+          .describedAs("port")
+          .ofType(Integer.class)
+          .defaultsTo(1174);
+      ArgumentAcceptingOptionSpec<String> path = parser.accepts("path", "Resource path (prefix with a '/')")
+          .withOptionalArg()
+          .describedAs("path")
+          .ofType(String.class)
+          .defaultsTo("/");
       ArgumentAcceptingOptionSpec<String> requestType =
-          parser.accepts("requestType", "The type of request to make (POST, GET)").withOptionalArg()
-              .describedAs("requestType").ofType(String.class).defaultsTo(GET);
-      ArgumentAcceptingOptionSpec<Integer> concurrency =
-          parser.accepts("concurrency", "Number of parallel requests").withOptionalArg().describedAs("concurrency")
-              .ofType(Integer.class).defaultsTo(1);
+          parser.accepts("requestType", "The type of request to make (POST, GET)")
+              .withOptionalArg()
+              .describedAs("requestType")
+              .ofType(String.class)
+              .defaultsTo(GET);
+      ArgumentAcceptingOptionSpec<Integer> concurrency = parser.accepts("concurrency", "Number of parallel requests")
+          .withOptionalArg()
+          .describedAs("concurrency")
+          .ofType(Integer.class)
+          .defaultsTo(1);
       ArgumentAcceptingOptionSpec<Long> postBlobTotalSize =
-          parser.accepts("postBlobTotalSize", "Total size in bytes of blob to be POSTed").withOptionalArg()
-              .describedAs("postBlobTotalSize").ofType(Long.class);
+          parser.accepts("postBlobTotalSize", "Total size in bytes of blob to be POSTed")
+              .withOptionalArg()
+              .describedAs("postBlobTotalSize")
+              .ofType(Long.class);
       ArgumentAcceptingOptionSpec<Integer> postBlobChunkSize =
-          parser.accepts("postBlobChunkSize", "Size in bytes of each chunk that will be POSTed").withOptionalArg()
-              .describedAs("postBlobChunkSize").ofType(Integer.class);
+          parser.accepts("postBlobChunkSize", "Size in bytes of each chunk that will be POSTed")
+              .withOptionalArg()
+              .describedAs("postBlobChunkSize")
+              .ofType(Integer.class);
 
       OptionSet options = parser.parse(args);
       this.host = options.valueOf(host);
@@ -197,15 +231,13 @@ public class NettyPerfClient {
    * Starts the NettyPerfClient.
    * @throws InterruptedException
    */
-  protected void start()
-      throws InterruptedException {
+  protected void start() throws InterruptedException {
     logger.info("Starting NettyPerfClient");
     reporter.start();
     group = new NioEventLoopGroup(concurrency);
     b.group(group).channel(NioSocketChannel.class).handler(new ChannelInitializer<SocketChannel>() {
       @Override
-      public void initChannel(SocketChannel ch)
-          throws Exception {
+      public void initChannel(SocketChannel ch) throws Exception {
         ch.pipeline().addLast(new HttpClientCodec()).addLast(new ChunkedWriteHandler()).addLast(new ResponseHandler());
       }
     });
@@ -255,8 +287,7 @@ public class NettyPerfClient {
    * Blocking function to wait on the NettyPerfClient shutting down.
    * @throws InterruptedException
    */
-  protected void awaitShutdown()
-      throws InterruptedException {
+  protected void awaitShutdown() throws InterruptedException {
     shutdownLatch.await();
   }
 
@@ -353,8 +384,8 @@ public class NettyPerfClient {
     private void sendRequest(ChannelHandlerContext ctx) {
       requestId++;
       long globalId = totalRequestCount.incrementAndGet();
-      logger
-          .trace("Sending request with global ID {} and local ID {} on channel {}", globalId, requestId, ctx.channel());
+      logger.trace("Sending request with global ID {} and local ID {} on channel {}", globalId, requestId,
+          ctx.channel());
       reset();
       perfClientMetrics.requestRate.mark();
       ctx.writeAndFlush(request);
@@ -422,8 +453,7 @@ public class NettyPerfClient {
       }
 
       @Override
-      public ByteBuf readChunk(ChannelHandlerContext ctx)
-          throws Exception {
+      public ByteBuf readChunk(ChannelHandlerContext ctx) throws Exception {
         ByteBuf buf = null;
         if (streamed == 0) {
           startTime = System.currentTimeMillis();
@@ -489,10 +519,10 @@ public class NettyPerfClient {
 
       delayBetweenChunkReceiveInMs =
           metricRegistry.histogram(MetricRegistry.name(ResponseHandler.class, "DelayBetweenChunkReceiveInMs"));
-      delayBetweenChunkSendInMs = metricRegistry
-          .histogram(MetricRegistry.name(ResponseHandler.RepeatedBytesInput.class, "DelayBetweenChunkSendInMs"));
-      getContentSizeInBytes = metricRegistry
-          .histogram(MetricRegistry.name(ResponseHandler.RepeatedBytesInput.class, "GetContentSizeInBytes"));
+      delayBetweenChunkSendInMs = metricRegistry.histogram(
+          MetricRegistry.name(ResponseHandler.RepeatedBytesInput.class, "DelayBetweenChunkSendInMs"));
+      getContentSizeInBytes = metricRegistry.histogram(
+          MetricRegistry.name(ResponseHandler.RepeatedBytesInput.class, "GetContentSizeInBytes"));
       getChunkCount =
           metricRegistry.histogram(MetricRegistry.name(ResponseHandler.RepeatedBytesInput.class, "GetChunkCount"));
       postChunksTimeInMs =

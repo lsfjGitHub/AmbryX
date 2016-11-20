@@ -35,22 +35,25 @@ import com.github.ambry.protocol.PutResponse;
 import com.github.ambry.tools.util.ToolUtils;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Throttler;
-import com.github.ambry.utils.Utils;
-import joptsimple.ArgumentAcceptingOptionSpec;
-import joptsimple.OptionParser;
-import joptsimple.OptionSet;
-import joptsimple.OptionSpec;
-
 import java.io.DataInputStream;
 import java.io.File;
 import java.io.FileWriter;
 import java.nio.ByteBuffer;
 import java.rmi.UnexpectedException;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Properties;
+import java.util.Random;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import joptsimple.ArgumentAcceptingOptionSpec;
+import joptsimple.OptionParser;
+import joptsimple.OptionSet;
+import joptsimple.OptionSpec;
 
+import static com.github.ambry.utils.Utils.*;
 import static com.github.ambry.utils.Utils.getRandomLong;
 
 
@@ -66,68 +69,111 @@ public class ServerWritePerformance {
       OptionParser parser = new OptionParser();
 
       ArgumentAcceptingOptionSpec<String> hardwareLayoutOpt =
-          parser.accepts("hardwareLayout", "The path of the hardware layout file").withRequiredArg()
-              .describedAs("hardware_layout").ofType(String.class);
+          parser.accepts("hardwareLayout", "The path of the hardware layout file")
+              .withRequiredArg()
+              .describedAs("hardware_layout")
+              .ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> partitionLayoutOpt =
-          parser.accepts("partitionLayout", "The path of the partition layout file").withRequiredArg()
-              .describedAs("partition_layout").ofType(String.class);
+          parser.accepts("partitionLayout", "The path of the partition layout file")
+              .withRequiredArg()
+              .describedAs("partition_layout")
+              .ofType(String.class);
 
       ArgumentAcceptingOptionSpec<Integer> numberOfWritersOpt =
-          parser.accepts("numberOfWriters", "The number of writers that issue put request").withRequiredArg()
-              .describedAs("The number of writers").ofType(Integer.class).defaultsTo(4);
+          parser.accepts("numberOfWriters", "The number of writers that issue put request")
+              .withRequiredArg()
+              .describedAs("The number of writers")
+              .ofType(Integer.class)
+              .defaultsTo(4);
 
       ArgumentAcceptingOptionSpec<Integer> minBlobSizeOpt =
-          parser.accepts("minBlobSizeInBytes", "The minimum size of the blob that can be put").withRequiredArg()
-              .describedAs("The minimum blob size in bytes").ofType(Integer.class).defaultsTo(51200);
+          parser.accepts("minBlobSizeInBytes", "The minimum size of the blob that can be put")
+              .withRequiredArg()
+              .describedAs("The minimum blob size in bytes")
+              .ofType(Integer.class)
+              .defaultsTo(51200);
 
       ArgumentAcceptingOptionSpec<Integer> maxBlobSizeOpt =
-          parser.accepts("maxBlobSizeInBytes", "The maximum size of the blob that can be put").withRequiredArg()
-              .describedAs("The maximum blob size in bytes").ofType(Integer.class).defaultsTo(4194304);
+          parser.accepts("maxBlobSizeInBytes", "The maximum size of the blob that can be put")
+              .withRequiredArg()
+              .describedAs("The maximum blob size in bytes")
+              .ofType(Integer.class)
+              .defaultsTo(4194304);
 
       ArgumentAcceptingOptionSpec<Integer> writesPerSecondOpt =
-          parser.accepts("writesPerSecond", "The rate at which writes need to be performed").withRequiredArg()
-              .describedAs("The number of writes per second").ofType(Integer.class).defaultsTo(1000);
+          parser.accepts("writesPerSecond", "The rate at which writes need to be performed")
+              .withRequiredArg()
+              .describedAs("The number of writes per second")
+              .ofType(Integer.class)
+              .defaultsTo(1000);
 
       ArgumentAcceptingOptionSpec<Long> measurementIntervalOpt =
-          parser.accepts("measurementInterval", "The interval in second to report performance result").withOptionalArg()
-              .describedAs("The CPU time spent for putting blobs, not wall time").ofType(Long.class).defaultsTo(300L);
+          parser.accepts("measurementInterval", "The interval in second to report performance result")
+              .withOptionalArg()
+              .describedAs("The CPU time spent for putting blobs, not wall time")
+              .ofType(Long.class)
+              .defaultsTo(300L);
 
       ArgumentAcceptingOptionSpec<Boolean> verboseLoggingOpt =
-          parser.accepts("enableVerboseLogging", "Enables verbose logging").withOptionalArg()
-              .describedAs("Enable verbose logging").ofType(Boolean.class).defaultsTo(false);
+          parser.accepts("enableVerboseLogging", "Enables verbose logging")
+              .withOptionalArg()
+              .describedAs("Enable verbose logging")
+              .ofType(Boolean.class)
+              .defaultsTo(false);
 
       ArgumentAcceptingOptionSpec<String> sslEnabledDatacentersOpt =
-          parser.accepts("sslEnabledDatacenters", "Datacenters to which ssl should be enabled").withOptionalArg()
-              .describedAs("Comma separated list").ofType(String.class).defaultsTo("");
+          parser.accepts("sslEnabledDatacenters", "Datacenters to which ssl should be enabled")
+              .withOptionalArg()
+              .describedAs("Comma separated list")
+              .ofType(String.class)
+              .defaultsTo("");
 
-      ArgumentAcceptingOptionSpec<String> sslKeystorePathOpt =
-          parser.accepts("sslKeystorePath", "SSL key store path").withOptionalArg()
-              .describedAs("The file path of SSL key store").defaultsTo("").ofType(String.class);
+      ArgumentAcceptingOptionSpec<String> sslKeystorePathOpt = parser.accepts("sslKeystorePath", "SSL key store path")
+          .withOptionalArg()
+          .describedAs("The file path of SSL key store")
+          .defaultsTo("")
+          .ofType(String.class);
 
-      ArgumentAcceptingOptionSpec<String> sslKeystoreTypeOpt =
-          parser.accepts("sslKeystoreType", "SSL key store type").withOptionalArg()
-              .describedAs("The type of SSL key store").defaultsTo("").ofType(String.class);
+      ArgumentAcceptingOptionSpec<String> sslKeystoreTypeOpt = parser.accepts("sslKeystoreType", "SSL key store type")
+          .withOptionalArg()
+          .describedAs("The type of SSL key store")
+          .defaultsTo("")
+          .ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> sslTruststorePathOpt =
-          parser.accepts("sslTruststorePath", "SSL trust store path").withOptionalArg()
-              .describedAs("The file path of SSL trust store").defaultsTo("").ofType(String.class);
+          parser.accepts("sslTruststorePath", "SSL trust store path")
+              .withOptionalArg()
+              .describedAs("The file path of SSL trust store")
+              .defaultsTo("")
+              .ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> sslKeystorePasswordOpt =
-          parser.accepts("sslKeystorePassword", "SSL key store password").withOptionalArg()
-              .describedAs("The password of SSL key store").defaultsTo("").ofType(String.class);
+          parser.accepts("sslKeystorePassword", "SSL key store password")
+              .withOptionalArg()
+              .describedAs("The password of SSL key store")
+              .defaultsTo("")
+              .ofType(String.class);
 
-      ArgumentAcceptingOptionSpec<String> sslKeyPasswordOpt =
-          parser.accepts("sslKeyPassword", "SSL key password").withOptionalArg()
-              .describedAs("The password of SSL private key").defaultsTo("").ofType(String.class);
+      ArgumentAcceptingOptionSpec<String> sslKeyPasswordOpt = parser.accepts("sslKeyPassword", "SSL key password")
+          .withOptionalArg()
+          .describedAs("The password of SSL private key")
+          .defaultsTo("")
+          .ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> sslTruststorePasswordOpt =
-          parser.accepts("sslTruststorePassword", "SSL trust store password").withOptionalArg()
-              .describedAs("The password of SSL trust store").defaultsTo("").ofType(String.class);
+          parser.accepts("sslTruststorePassword", "SSL trust store password")
+              .withOptionalArg()
+              .describedAs("The password of SSL trust store")
+              .defaultsTo("")
+              .ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> sslCipherSuitesOpt =
-          parser.accepts("sslCipherSuites", "SSL enabled cipher suites").withOptionalArg()
-              .describedAs("Comma separated list").defaultsTo("TLS_RSA_WITH_AES_128_CBC_SHA").ofType(String.class);
+          parser.accepts("sslCipherSuites", "SSL enabled cipher suites")
+              .withOptionalArg()
+              .describedAs("Comma separated list")
+              .defaultsTo("TLS_RSA_WITH_AES_128_CBC_SHA")
+              .ofType(String.class);
 
       OptionSet options = parser.parse(args);
 
@@ -171,14 +217,12 @@ public class ServerWritePerformance {
       String hardwareLayoutPath = options.valueOf(hardwareLayoutOpt);
       String partitionLayoutPath = options.valueOf(partitionLayoutOpt);
       ClusterMap map = new ClusterMapManager(hardwareLayoutPath, partitionLayoutPath,
-          new ClusterMapConfig(new VerifiableProperties(new Properties())));
+          new ClusterMapConfig(new VerifiableProperties(sslProperties)));
 
       File logFile = new File(System.getProperty("user.dir"), "writeperflog");
       blobIdsWriter = new FileWriter(logFile);
       File performanceFile = new File(System.getProperty("user.dir"), "writeperfresult");
       performanceWriter = new FileWriter(performanceFile);
-
-      ArrayList<String> sslEnabledDatacentersList = Utils.splitString(sslEnabledDatacenters, ",");
 
       final CountDownLatch latch = new CountDownLatch(numberOfWriters);
       final AtomicBoolean shutdown = new AtomicBoolean(false);
@@ -189,9 +233,9 @@ public class ServerWritePerformance {
             System.out.println("Shutdown invoked");
             shutdown.set(true);
             latch.await();
-            System.out.println("Total writes : " + totalWrites.get() + "  Total time taken : " + totalTimeTaken.get() +
-                " Nano Seconds  Average time taken per write " +
-                ((double) totalTimeTaken.get()) / SystemTime.NsPerSec / totalWrites.get() + " Seconds");
+            System.out.println("Total writes : " + totalWrites.get() + "  Total time taken : " + totalTimeTaken.get()
+                + " Nano Seconds  Average time taken per write "
+                + ((double) totalTimeTaken.get()) / SystemTime.NsPerSec / totalWrites.get() + " Seconds");
           } catch (Exception e) {
             System.out.println("Error while shutting down " + e);
           }
@@ -201,15 +245,18 @@ public class ServerWritePerformance {
       Throttler throttler = new Throttler(writesPerSecond, 100, true, SystemTime.getInstance());
       Thread[] threadIndexPerf = new Thread[numberOfWriters];
       ConnectionPoolConfig connectionPoolConfig = new ConnectionPoolConfig(new VerifiableProperties(new Properties()));
-      SSLConfig sslConfig = new SSLConfig(new VerifiableProperties(sslProperties));
-      connectionPool = new BlockingChannelConnectionPool(connectionPoolConfig, sslConfig, new MetricRegistry());
+      VerifiableProperties vProps = new VerifiableProperties(sslProperties);
+      SSLConfig sslConfig = new SSLConfig(vProps);
+      ClusterMapConfig clusterMapConfig = new ClusterMapConfig(vProps);
+      connectionPool =
+          new BlockingChannelConnectionPool(connectionPoolConfig, sslConfig, clusterMapConfig, new MetricRegistry());
       connectionPool.start();
 
       for (int i = 0; i < numberOfWriters; i++) {
         threadIndexPerf[i] = new Thread(
             new ServerWritePerfRun(i, throttler, shutdown, latch, minBlobSize, maxBlobSize, blobIdsWriter,
                 performanceWriter, totalTimeTaken, totalWrites, measurementIntervalNs, enableVerboseLogging, map,
-                connectionPool, sslEnabledDatacentersList));
+                connectionPool));
         threadIndexPerf[i].start();
       }
       for (int i = 0; i < numberOfWriters; i++) {
@@ -255,12 +302,11 @@ public class ServerWritePerformance {
     private boolean enableVerboseLogging;
     private int threadIndex;
     private ConnectionPool connectionPool;
-    private ArrayList<String> sslEnabledDatacenters;
 
     public ServerWritePerfRun(int threadIndex, Throttler throttler, AtomicBoolean isShutdown, CountDownLatch latch,
                               int minBlobSize, int maxBlobSize, FileWriter blobIdWriter, FileWriter performanceWriter,
                               AtomicLong totalTimeTaken, AtomicLong totalWrites, long measurementIntervalNs, boolean enableVerboseLogging,
-                              ClusterMap clusterMap, ConnectionPool connectionPool, ArrayList<String> sslEnabledDatacenters) {
+                              ClusterMap clusterMap, ConnectionPool connectionPool) {
       this.threadIndex = threadIndex;
       this.throttler = throttler;
       this.isShutdown = isShutdown;
@@ -275,7 +321,6 @@ public class ServerWritePerformance {
       this.measurementIntervalNs = measurementIntervalNs;
       this.enableVerboseLogging = enableVerboseLogging;
       this.connectionPool = connectionPool;
-      this.sslEnabledDatacenters = sslEnabledDatacenters;
     }
 
     public void run() {
@@ -300,10 +345,11 @@ public class ServerWritePerformance {
             int index = (int) getRandomLong(rand, partitionIds.size());
             PartitionId partitionId = partitionIds.get(index);
             BlobId blobId = new BlobId(partitionId);
-            PutRequest putRequest = new PutRequest(0, "perf", blobId, props, ByteBuffer.wrap(usermetadata),
-                ByteBuffer.wrap(blob), props.getBlobSize(), BlobType.DataBlob);
+            PutRequest putRequest =
+                new PutRequest(0, "perf", blobId, props, ByteBuffer.wrap(usermetadata), ByteBuffer.wrap(blob),
+                    props.getBlobSize(), BlobType.DataBlob);
             ReplicaId replicaId = partitionId.getReplicaIds().get(0);
-            Port port = replicaId.getDataNodeId().getPortToConnectTo(sslEnabledDatacenters);
+            Port port = replicaId.getDataNodeId().getPortToConnectTo();
             channel = connectionPool.checkOutConnection(replicaId.getDataNodeId().getHostname(), port, 10000);
             long startTime = SystemTime.getInstance().nanoseconds();
             channel.send(putRequest);

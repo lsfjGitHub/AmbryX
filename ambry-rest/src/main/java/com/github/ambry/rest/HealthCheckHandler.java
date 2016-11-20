@@ -14,8 +14,18 @@
 package com.github.ambry.rest;
 
 import io.netty.buffer.Unpooled;
-import io.netty.channel.*;
-import io.netty.handler.codec.http.*;
+import io.netty.channel.ChannelDuplexHandler;
+import io.netty.channel.ChannelFuture;
+import io.netty.channel.ChannelFutureListener;
+import io.netty.channel.ChannelHandlerContext;
+import io.netty.channel.ChannelPromise;
+import io.netty.handler.codec.http.DefaultFullHttpResponse;
+import io.netty.handler.codec.http.FullHttpResponse;
+import io.netty.handler.codec.http.HttpHeaders;
+import io.netty.handler.codec.http.HttpRequest;
+import io.netty.handler.codec.http.HttpResponseStatus;
+import io.netty.handler.codec.http.HttpVersion;
+import io.netty.handler.codec.http.LastHttpContent;
 import io.netty.util.ReferenceCountUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -46,8 +56,7 @@ public class HealthCheckHandler extends ChannelDuplexHandler {
   }
 
   @Override
-  public void channelRead(ChannelHandlerContext ctx, Object obj)
-      throws Exception {
+  public void channelRead(ChannelHandlerContext ctx, Object obj) throws Exception {
     logger.trace("Reading on channel {}", ctx.channel());
     boolean forwardObj = false;
     if (obj instanceof HttpRequest) {
@@ -100,8 +109,7 @@ public class HealthCheckHandler extends ChannelDuplexHandler {
   }
 
   @Override
-  public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise)
-      throws Exception {
+  public void write(ChannelHandlerContext ctx, Object msg, ChannelPromise promise) throws Exception {
     if (!restServerState.isServiceUp()) {
       if (msg instanceof LastHttpContent) {
         // Start closing client channels after we've completed writing to them (even if they are keep-alive)

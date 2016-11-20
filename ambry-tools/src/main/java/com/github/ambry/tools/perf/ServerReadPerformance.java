@@ -31,18 +31,22 @@ import com.github.ambry.network.BlockingChannelConnectionPool;
 import com.github.ambry.network.ConnectedChannel;
 import com.github.ambry.network.ConnectionPool;
 import com.github.ambry.network.Port;
-import com.github.ambry.protocol.*;
+import com.github.ambry.protocol.DeleteRequest;
+import com.github.ambry.protocol.DeleteResponse;
+import com.github.ambry.protocol.GetOption;
+import com.github.ambry.protocol.GetRequest;
+import com.github.ambry.protocol.GetResponse;
+import com.github.ambry.protocol.PartitionRequestInfo;
 import com.github.ambry.tools.util.ToolUtils;
 import com.github.ambry.utils.ByteBufferOutputStream;
 import com.github.ambry.utils.SystemTime;
 import com.github.ambry.utils.Throttler;
-import com.github.ambry.utils.Utils;
-import joptsimple.ArgumentAcceptingOptionSpec;
-import joptsimple.OptionParser;
-import joptsimple.OptionSet;
-import joptsimple.OptionSpec;
-
-import java.io.*;
+import java.io.BufferedReader;
+import java.io.DataInputStream;
+import java.io.File;
+import java.io.FileReader;
+import java.io.FileWriter;
+import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.rmi.UnexpectedException;
 import java.util.ArrayList;
@@ -50,6 +54,10 @@ import java.util.Collections;
 import java.util.Properties;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import joptsimple.ArgumentAcceptingOptionSpec;
+import joptsimple.OptionParser;
+import joptsimple.OptionSet;
+import joptsimple.OptionSpec;
 
 
 /**
@@ -62,60 +70,96 @@ public class ServerReadPerformance {
     try {
       OptionParser parser = new OptionParser();
       ArgumentAcceptingOptionSpec<String> logToReadOpt =
-          parser.accepts("logToRead", "The log that needs to be replayed for traffic").withRequiredArg()
-              .describedAs("log_to_read").ofType(String.class);
+          parser.accepts("logToRead", "The log that needs to be replayed for traffic")
+              .withRequiredArg()
+              .describedAs("log_to_read")
+              .ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> hardwareLayoutOpt =
-          parser.accepts("hardwareLayout", "The path of the hardware layout file").withRequiredArg()
-              .describedAs("hardware_layout").ofType(String.class);
+          parser.accepts("hardwareLayout", "The path of the hardware layout file")
+              .withRequiredArg()
+              .describedAs("hardware_layout")
+              .ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> partitionLayoutOpt =
-          parser.accepts("partitionLayout", "The path of the partition layout file").withRequiredArg()
-              .describedAs("partition_layout").ofType(String.class);
+          parser.accepts("partitionLayout", "The path of the partition layout file")
+              .withRequiredArg()
+              .describedAs("partition_layout")
+              .ofType(String.class);
 
       ArgumentAcceptingOptionSpec<Integer> readsPerSecondOpt =
-          parser.accepts("readsPerSecond", "The rate at which reads need to be performed").withRequiredArg()
-              .describedAs("The number of reads per second").ofType(Integer.class).defaultsTo(1000);
+          parser.accepts("readsPerSecond", "The rate at which reads need to be performed")
+              .withRequiredArg()
+              .describedAs("The number of reads per second")
+              .ofType(Integer.class)
+              .defaultsTo(1000);
 
       ArgumentAcceptingOptionSpec<Long> measurementIntervalOpt =
-          parser.accepts("measurementInterval", "The interval in second to report performance result").withOptionalArg()
-              .describedAs("The CPU time spent for getting blobs, not wall time").ofType(Long.class).defaultsTo(300L);
+          parser.accepts("measurementInterval", "The interval in second to report performance result")
+              .withOptionalArg()
+              .describedAs("The CPU time spent for getting blobs, not wall time")
+              .ofType(Long.class)
+              .defaultsTo(300L);
 
       ArgumentAcceptingOptionSpec<Boolean> verboseLoggingOpt =
-          parser.accepts("enableVerboseLogging", "Enables verbose logging").withOptionalArg()
-              .describedAs("Enable verbose logging").ofType(Boolean.class).defaultsTo(false);
+          parser.accepts("enableVerboseLogging", "Enables verbose logging")
+              .withOptionalArg()
+              .describedAs("Enable verbose logging")
+              .ofType(Boolean.class)
+              .defaultsTo(false);
 
       ArgumentAcceptingOptionSpec<String> sslEnabledDatacentersOpt =
-          parser.accepts("sslEnabledDatacenters", "Datacenters to which ssl should be enabled").withOptionalArg()
-              .describedAs("Comma separated list").ofType(String.class).defaultsTo("");
+          parser.accepts("sslEnabledDatacenters", "Datacenters to which ssl should be enabled")
+              .withOptionalArg()
+              .describedAs("Comma separated list")
+              .ofType(String.class)
+              .defaultsTo("");
 
-      ArgumentAcceptingOptionSpec<String> sslKeystorePathOpt =
-          parser.accepts("sslKeystorePath", "SSL key store path").withOptionalArg()
-              .describedAs("The file path of SSL key store").defaultsTo("").ofType(String.class);
+      ArgumentAcceptingOptionSpec<String> sslKeystorePathOpt = parser.accepts("sslKeystorePath", "SSL key store path")
+          .withOptionalArg()
+          .describedAs("The file path of SSL key store")
+          .defaultsTo("")
+          .ofType(String.class);
 
-      ArgumentAcceptingOptionSpec<String> sslKeystoreTypeOpt =
-          parser.accepts("sslKeystoreType", "SSL key store type").withOptionalArg()
-              .describedAs("The type of SSL key store").defaultsTo("").ofType(String.class);
+      ArgumentAcceptingOptionSpec<String> sslKeystoreTypeOpt = parser.accepts("sslKeystoreType", "SSL key store type")
+          .withOptionalArg()
+          .describedAs("The type of SSL key store")
+          .defaultsTo("")
+          .ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> sslTruststorePathOpt =
-          parser.accepts("sslTruststorePath", "SSL trust store path").withOptionalArg()
-              .describedAs("The file path of SSL trust store").defaultsTo("").ofType(String.class);
+          parser.accepts("sslTruststorePath", "SSL trust store path")
+              .withOptionalArg()
+              .describedAs("The file path of SSL trust store")
+              .defaultsTo("")
+              .ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> sslKeystorePasswordOpt =
-          parser.accepts("sslKeystorePassword", "SSL key store password").withOptionalArg()
-              .describedAs("The password of SSL key store").defaultsTo("").ofType(String.class);
+          parser.accepts("sslKeystorePassword", "SSL key store password")
+              .withOptionalArg()
+              .describedAs("The password of SSL key store")
+              .defaultsTo("")
+              .ofType(String.class);
 
-      ArgumentAcceptingOptionSpec<String> sslKeyPasswordOpt =
-          parser.accepts("sslKeyPassword", "SSL key password").withOptionalArg()
-              .describedAs("The password of SSL private key").defaultsTo("").ofType(String.class);
+      ArgumentAcceptingOptionSpec<String> sslKeyPasswordOpt = parser.accepts("sslKeyPassword", "SSL key password")
+          .withOptionalArg()
+          .describedAs("The password of SSL private key")
+          .defaultsTo("")
+          .ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> sslTruststorePasswordOpt =
-          parser.accepts("sslTruststorePassword", "SSL trust store password").withOptionalArg()
-              .describedAs("The password of SSL trust store").defaultsTo("").ofType(String.class);
+          parser.accepts("sslTruststorePassword", "SSL trust store password")
+              .withOptionalArg()
+              .describedAs("The password of SSL trust store")
+              .defaultsTo("")
+              .ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> sslCipherSuitesOpt =
-          parser.accepts("sslCipherSuites", "SSL enabled cipher suites").withOptionalArg()
-              .describedAs("Comma separated list").defaultsTo("TLS_RSA_WITH_AES_128_CBC_SHA").ofType(String.class);
+          parser.accepts("sslCipherSuites", "SSL enabled cipher suites")
+              .withOptionalArg()
+              .describedAs("Comma separated list")
+              .defaultsTo("TLS_RSA_WITH_AES_128_CBC_SHA")
+              .ofType(String.class);
 
       OptionSet options = parser.parse(args);
 
@@ -159,9 +203,8 @@ public class ServerReadPerformance {
       String hardwareLayoutPath = options.valueOf(hardwareLayoutOpt);
       String partitionLayoutPath = options.valueOf(partitionLayoutOpt);
       ClusterMap map = new ClusterMapManager(hardwareLayoutPath, partitionLayoutPath,
-          new ClusterMapConfig(new VerifiableProperties(new Properties())));
+          new ClusterMapConfig(new VerifiableProperties(sslProperties)));
 
-      ArrayList<String> sslEnabledDatacentersList = Utils.splitString(sslEnabledDatacenters, ",");
       final AtomicLong totalTimeTaken = new AtomicLong(0);
       final AtomicLong totalReads = new AtomicLong(0);
       final AtomicBoolean shutdown = new AtomicBoolean(false);
@@ -185,8 +228,11 @@ public class ServerReadPerformance {
       String line;
       ConnectedChannel channel = null;
       ConnectionPoolConfig connectionPoolConfig = new ConnectionPoolConfig(new VerifiableProperties(new Properties()));
-      SSLConfig sslConfig = new SSLConfig(new VerifiableProperties(sslProperties));
-      connectionPool = new BlockingChannelConnectionPool(connectionPoolConfig, sslConfig, new MetricRegistry());
+      VerifiableProperties vProps = new VerifiableProperties(sslProperties);
+      SSLConfig sslConfig = new SSLConfig(vProps);
+      ClusterMapConfig clusterMapConfig = new ClusterMapConfig(vProps);
+      connectionPool =
+          new BlockingChannelConnectionPool(connectionPoolConfig, sslConfig, clusterMapConfig, new MetricRegistry());
       long totalNumberOfGetBlobs = 0;
       long totalLatencyForGetBlobs = 0;
       ArrayList<Long> latenciesForGetBlobs = new ArrayList<Long>();
@@ -207,8 +253,8 @@ public class ServerReadPerformance {
             PartitionRequestInfo partitionRequestInfo = new PartitionRequestInfo(blobId.getPartition(), blobIds);
             partitionRequestInfoList.add(partitionRequestInfo);
             GetRequest getRequest =
-                new GetRequest(1, "getperf", MessageFormatFlags.Blob, partitionRequestInfoList, GetOptions.None);
-            Port port = replicaId.getDataNodeId().getPortToConnectTo(sslEnabledDatacentersList);
+                new GetRequest(1, "getperf", MessageFormatFlags.Blob, partitionRequestInfoList, GetOption.None);
+            Port port = replicaId.getDataNodeId().getPortToConnectTo();
             channel = connectionPool.checkOutConnection(replicaId.getDataNodeId().getHostname(), port, 10000);
             startTimeGetBlob = SystemTime.getInstance().nanoseconds();
             channel.send(getRequest);
@@ -229,8 +275,8 @@ public class ServerReadPerformance {
             totalNumberOfGetBlobs++;
             totalLatencyForGetBlobs += latencyPerBlob;
             if (enableVerboseLogging) {
-              System.out
-                  .println("Time taken to get blob id " + blobId + " in ms " + latencyPerBlob / SystemTime.NsPerMs);
+              System.out.println(
+                  "Time taken to get blob id " + blobId + " in ms " + latencyPerBlob / SystemTime.NsPerMs);
             }
             if (latencyPerBlob > maxLatencyForGetBlobs) {
               maxLatencyForGetBlobs = latencyPerBlob;
@@ -260,7 +306,7 @@ public class ServerReadPerformance {
             partitionRequestInfoList.add(partitionRequestInfo);
             GetRequest getRequestProperties =
                 new GetRequest(1, "getperf", MessageFormatFlags.BlobProperties, partitionRequestInfoList,
-                    GetOptions.None);
+                    GetOption.None);
             long startTimeGetBlobProperties = SystemTime.getInstance().nanoseconds();
             channel.send(getRequestProperties);
             InputStream receivePropertyStream = channel.receive().getInputStream();
@@ -274,7 +320,7 @@ public class ServerReadPerformance {
             partitionRequestInfoList.add(partitionRequestInfo);
             GetRequest getRequestUserMetadata =
                 new GetRequest(1, "getperf", MessageFormatFlags.BlobUserMetadata, partitionRequestInfoList,
-                    GetOptions.None);
+                    GetOption.None);
 
             long startTimeGetBlobUserMetadata = SystemTime.getInstance().nanoseconds();
             channel.send(getRequestUserMetadata);

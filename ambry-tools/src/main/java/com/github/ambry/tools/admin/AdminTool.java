@@ -23,25 +23,31 @@ import com.github.ambry.config.ClusterMapConfig;
 import com.github.ambry.config.ConnectionPoolConfig;
 import com.github.ambry.config.SSLConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.messageformat.*;
-import com.github.ambry.network.*;
-import com.github.ambry.protocol.GetOptions;
+import com.github.ambry.messageformat.BlobData;
+import com.github.ambry.messageformat.BlobProperties;
+import com.github.ambry.messageformat.MessageFormatException;
+import com.github.ambry.messageformat.MessageFormatFlags;
+import com.github.ambry.messageformat.MessageFormatRecord;
+import com.github.ambry.network.BlockingChannelConnectionPool;
+import com.github.ambry.network.ConnectedChannel;
+import com.github.ambry.network.ConnectionPool;
+import com.github.ambry.network.ConnectionPoolTimeoutException;
+import com.github.ambry.network.Port;
+import com.github.ambry.protocol.GetOption;
 import com.github.ambry.protocol.GetRequest;
 import com.github.ambry.protocol.GetResponse;
 import com.github.ambry.protocol.PartitionRequestInfo;
 import com.github.ambry.tools.util.ToolUtils;
-import com.github.ambry.utils.Utils;
-import joptsimple.ArgumentAcceptingOptionSpec;
-import joptsimple.OptionParser;
-import joptsimple.OptionSet;
-import joptsimple.OptionSpec;
-
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
 import java.util.concurrent.atomic.AtomicInteger;
+import joptsimple.ArgumentAcceptingOptionSpec;
+import joptsimple.OptionParser;
+import joptsimple.OptionSet;
+import joptsimple.OptionSpec;
 
 
 /**
@@ -51,11 +57,9 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public class AdminTool {
   private final ConnectionPool connectionPool;
-  private final ArrayList<String> sslEnabledDatacentersList;
 
-  public AdminTool(ConnectionPool connectionPool, ArrayList<String> sslEnabledDatacentersList) {
+  public AdminTool(ConnectionPool connectionPool) {
     this.connectionPool = connectionPool;
-    this.sslEnabledDatacentersList = sslEnabledDatacentersList;
   }
 
   public static void main(String args[]) {
@@ -64,57 +68,89 @@ public class AdminTool {
       OptionParser parser = new OptionParser();
 
       ArgumentAcceptingOptionSpec<String> hardwareLayoutOpt =
-          parser.accepts("hardwareLayout", "The path of the hardware layout file").withRequiredArg()
-              .describedAs("hardware_layout").ofType(String.class);
+          parser.accepts("hardwareLayout", "The path of the hardware layout file")
+              .withRequiredArg()
+              .describedAs("hardware_layout")
+              .ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> partitionLayoutOpt =
-          parser.accepts("partitionLayout", "The path of the partition layout file").withRequiredArg()
-              .describedAs("partition_layout").ofType(String.class);
+          parser.accepts("partitionLayout", "The path of the partition layout file")
+              .withRequiredArg()
+              .describedAs("partition_layout")
+              .ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> typeOfOperationOpt = parser.accepts("typeOfOperation",
           "The type of operation to execute - LIST_REPLICAS/GET_BLOB/GET_BLOB_PROPERTIES/GET_USERMETADATA")
-          .withRequiredArg().describedAs("The type of file").ofType(String.class).defaultsTo("GET");
+          .withRequiredArg()
+          .describedAs("The type of file")
+          .ofType(String.class)
+          .defaultsTo("GET");
 
       ArgumentAcceptingOptionSpec<String> ambryBlobIdOpt =
-          parser.accepts("ambryBlobId", "The blob id to execute get on").withRequiredArg().describedAs("The blob id")
+          parser.accepts("ambryBlobId", "The blob id to execute get on")
+              .withRequiredArg()
+              .describedAs("The blob id")
               .ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> includeExpiredBlobsOpt =
-          parser.accepts("includeExpiredBlob", "Included expired blobs too").withRequiredArg()
-              .describedAs("Whether to include expired blobs while querying or not").defaultsTo("false")
+          parser.accepts("includeExpiredBlob", "Included expired blobs too")
+              .withRequiredArg()
+              .describedAs("Whether to include expired blobs while querying or not")
+              .defaultsTo("false")
               .ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> sslEnabledDatacentersOpt =
-          parser.accepts("sslEnabledDatacenters", "Datacenters to which ssl should be enabled").withOptionalArg()
-              .describedAs("Comma separated list").defaultsTo("").ofType(String.class);
+          parser.accepts("sslEnabledDatacenters", "Datacenters to which ssl should be enabled")
+              .withOptionalArg()
+              .describedAs("Comma separated list")
+              .defaultsTo("")
+              .ofType(String.class);
 
-      ArgumentAcceptingOptionSpec<String> sslKeystorePathOpt =
-          parser.accepts("sslKeystorePath", "SSL key store path").withOptionalArg()
-              .describedAs("The file path of SSL key store").defaultsTo("").ofType(String.class);
+      ArgumentAcceptingOptionSpec<String> sslKeystorePathOpt = parser.accepts("sslKeystorePath", "SSL key store path")
+          .withOptionalArg()
+          .describedAs("The file path of SSL key store")
+          .defaultsTo("")
+          .ofType(String.class);
 
-      ArgumentAcceptingOptionSpec<String> sslKeystoreTypeOpt =
-          parser.accepts("sslKeystoreType", "SSL key store type").withOptionalArg()
-              .describedAs("The type of SSL key store").defaultsTo("").ofType(String.class);
+      ArgumentAcceptingOptionSpec<String> sslKeystoreTypeOpt = parser.accepts("sslKeystoreType", "SSL key store type")
+          .withOptionalArg()
+          .describedAs("The type of SSL key store")
+          .defaultsTo("")
+          .ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> sslTruststorePathOpt =
-          parser.accepts("sslTruststorePath", "SSL trust store path").withOptionalArg()
-              .describedAs("The file path of SSL trust store").defaultsTo("").ofType(String.class);
+          parser.accepts("sslTruststorePath", "SSL trust store path")
+              .withOptionalArg()
+              .describedAs("The file path of SSL trust store")
+              .defaultsTo("")
+              .ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> sslKeystorePasswordOpt =
-          parser.accepts("sslKeystorePassword", "SSL key store password").withOptionalArg()
-              .describedAs("The password of SSL key store").defaultsTo("").ofType(String.class);
+          parser.accepts("sslKeystorePassword", "SSL key store password")
+              .withOptionalArg()
+              .describedAs("The password of SSL key store")
+              .defaultsTo("")
+              .ofType(String.class);
 
-      ArgumentAcceptingOptionSpec<String> sslKeyPasswordOpt =
-          parser.accepts("sslKeyPassword", "SSL key password").withOptionalArg()
-              .describedAs("The password of SSL private key").defaultsTo("").ofType(String.class);
+      ArgumentAcceptingOptionSpec<String> sslKeyPasswordOpt = parser.accepts("sslKeyPassword", "SSL key password")
+          .withOptionalArg()
+          .describedAs("The password of SSL private key")
+          .defaultsTo("")
+          .ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> sslTruststorePasswordOpt =
-          parser.accepts("sslTruststorePassword", "SSL trust store password").withOptionalArg()
-              .describedAs("The password of SSL trust store").defaultsTo("").ofType(String.class);
+          parser.accepts("sslTruststorePassword", "SSL trust store password")
+              .withOptionalArg()
+              .describedAs("The password of SSL trust store")
+              .defaultsTo("")
+              .ofType(String.class);
 
       ArgumentAcceptingOptionSpec<String> sslCipherSuitesOpt =
-          parser.accepts("sslCipherSuites", "SSL enabled cipher suites").withOptionalArg()
-              .describedAs("Comma separated list").defaultsTo("TLS_RSA_WITH_AES_128_CBC_SHA").ofType(String.class);
+          parser.accepts("sslCipherSuites", "SSL enabled cipher suites")
+              .withOptionalArg()
+              .describedAs("Comma separated list")
+              .defaultsTo("TLS_RSA_WITH_AES_128_CBC_SHA")
+              .ofType(String.class);
 
       OptionSet options = parser.parse(args);
 
@@ -144,18 +180,19 @@ public class AdminTool {
         sslProperties = new Properties();
       }
       Properties connectionPoolProperties = ToolUtils.createConnectionPoolProperties();
-      SSLConfig sslConfig = new SSLConfig(new VerifiableProperties(sslProperties));
       ConnectionPoolConfig connectionPoolConfig =
           new ConnectionPoolConfig(new VerifiableProperties(connectionPoolProperties));
-      connectionPool = new BlockingChannelConnectionPool(connectionPoolConfig, sslConfig, new MetricRegistry());
+      VerifiableProperties vProps = new VerifiableProperties(sslProperties);
+      SSLConfig sslConfig = new SSLConfig(vProps);
+      ClusterMapConfig clusterMapConfig = new ClusterMapConfig(vProps);
+      connectionPool =
+          new BlockingChannelConnectionPool(connectionPoolConfig, sslConfig, clusterMapConfig, new MetricRegistry());
       String hardwareLayoutPath = options.valueOf(hardwareLayoutOpt);
       String partitionLayoutPath = options.valueOf(partitionLayoutOpt);
-      ClusterMap map = new ClusterMapManager(hardwareLayoutPath, partitionLayoutPath,
-          new ClusterMapConfig(new VerifiableProperties(new Properties())));
+      ClusterMap map = new ClusterMapManager(hardwareLayoutPath, partitionLayoutPath, clusterMapConfig);
 
       String blobIdStr = options.valueOf(ambryBlobIdOpt);
-      ArrayList<String> sslEnabledDatacentersList = Utils.splitString(sslEnabledDatacenters, ",");
-      AdminTool adminTool = new AdminTool(connectionPool, sslEnabledDatacentersList);
+      AdminTool adminTool = new AdminTool(connectionPool);
       BlobId blobId = new BlobId(blobIdStr, map);
       String typeOfOperation = options.valueOf(typeOfOperationOpt);
       boolean includeExpiredBlobs = Boolean.parseBoolean(options.valueOf(includeExpiredBlobsOpt));
@@ -214,15 +251,15 @@ public class AdminTool {
     ArrayList<PartitionRequestInfo> partitionRequestInfos = new ArrayList<PartitionRequestInfo>();
     partitionRequestInfos.add(partitionRequestInfo);
 
-    GetOptions getOptions = (expiredBlobs) ? GetOptions.Include_Expired_Blobs : GetOptions.None;
+    GetOption getOption = (expiredBlobs) ? GetOption.Include_Expired_Blobs : GetOption.None;
 
     try {
-      Port port = replicaId.getDataNodeId().getPortToConnectTo(sslEnabledDatacentersList);
+      Port port = replicaId.getDataNodeId().getPortToConnectTo();
       connectedChannel = connectionPool.checkOutConnection(replicaId.getDataNodeId().getHostname(), port, 10000);
 
       GetRequest getRequest =
           new GetRequest(correlationId.incrementAndGet(), "readverifier", MessageFormatFlags.BlobProperties,
-              partitionRequestInfos, getOptions);
+              partitionRequestInfos, getOption);
       System.out.println("Get Request to verify replica blob properties : " + getRequest);
       GetResponse getResponse = null;
 
@@ -235,10 +272,9 @@ public class AdminTool {
       ServerErrorCode serverResponseCode = getResponse.getPartitionResponseInfoList().get(0).getErrorCode();
       System.out.println("Get Response from Stream to verify replica blob properties : " + getResponse.getError());
       if (getResponse.getError() != ServerErrorCode.No_Error || serverResponseCode != ServerErrorCode.No_Error) {
-        System.out.println("getBlobProperties error on response " + getResponse.getError() +
-            " error code on partition " + serverResponseCode +
-            " ambryReplica " + replicaId.getDataNodeId().getHostname() + " port " + port.toString() +
-            " blobId " + blobId);
+        System.out.println("getBlobProperties error on response " + getResponse.getError() + " error code on partition "
+            + serverResponseCode + " ambryReplica " + replicaId.getDataNodeId().getHostname() + " port "
+            + port.toString() + " blobId " + blobId);
         if (serverResponseCode == ServerErrorCode.Blob_Not_Found) {
           return null;
         } else if (serverResponseCode == ServerErrorCode.Blob_Deleted) {
@@ -250,9 +286,8 @@ public class AdminTool {
         BlobProperties properties = MessageFormatRecord.deserializeBlobProperties(getResponse.getInputStream());
         System.out.println(
             "Blob Properties : Content Type : " + properties.getContentType() + ", OwnerId : " + properties.getOwnerId()
-                +
-                ", Size : " + properties.getBlobSize() + ", CreationTimeInMs : " + properties.getCreationTimeInMs() +
-                ", ServiceId : " + properties.getServiceId() + ", TTL : " + properties.getTimeToLiveInSeconds());
+                + ", Size : " + properties.getBlobSize() + ", CreationTimeInMs : " + properties.getCreationTimeInMs()
+                + ", ServiceId : " + properties.getServiceId() + ", TTL : " + properties.getTimeToLiveInSeconds());
         return properties;
       }
     } catch (MessageFormatException mfe) {
@@ -299,14 +334,14 @@ public class AdminTool {
     ArrayList<PartitionRequestInfo> partitionRequestInfos = new ArrayList<PartitionRequestInfo>();
     partitionRequestInfos.add(partitionRequestInfo);
 
-    GetOptions getOptions = (expiredBlobs) ? GetOptions.Include_Expired_Blobs : GetOptions.None;
+    GetOption getOption = (expiredBlobs) ? GetOption.Include_Expired_Blobs : GetOption.None;
 
     try {
-      Port port = replicaId.getDataNodeId().getPortToConnectTo(sslEnabledDatacentersList);
+      Port port = replicaId.getDataNodeId().getPortToConnectTo();
       connectedChannel = connectionPool.checkOutConnection(replicaId.getDataNodeId().getHostname(), port, 10000);
 
       GetRequest getRequest = new GetRequest(correlationId.incrementAndGet(), "readverifier", MessageFormatFlags.Blob,
-          partitionRequestInfos, getOptions);
+          partitionRequestInfos, getOption);
       System.out.println("Get Request to get blob : " + getRequest);
       GetResponse getResponse = null;
       getResponse = BlobValidator.getGetResponseFromStream(connectedChannel, getRequest, clusterMap);
@@ -318,10 +353,10 @@ public class AdminTool {
       System.out.println("Get Response to get blob : " + getResponse.getError());
       ServerErrorCode serverResponseCode = getResponse.getPartitionResponseInfoList().get(0).getErrorCode();
       if (getResponse.getError() != ServerErrorCode.No_Error || serverResponseCode != ServerErrorCode.No_Error) {
-        System.out.println("blob get error on response " + getResponse.getError() +
-            " error code on partition " + serverResponseCode +
-            " ambryReplica " + replicaId.getDataNodeId().getHostname() + " port " + port.toString() +
-            " blobId " + blobId);
+        System.out.println(
+            "blob get error on response " + getResponse.getError() + " error code on partition " + serverResponseCode
+                + " ambryReplica " + replicaId.getDataNodeId().getHostname() + " port " + port.toString() + " blobId "
+                + blobId);
         if (serverResponseCode == ServerErrorCode.Blob_Not_Found) {
           return null;
         } else if (serverResponseCode == ServerErrorCode.Blob_Deleted) {
@@ -376,15 +411,15 @@ public class AdminTool {
     ArrayList<PartitionRequestInfo> partitionRequestInfos = new ArrayList<PartitionRequestInfo>();
     partitionRequestInfos.add(partitionRequestInfo);
 
-    GetOptions getOptions = (expiredBlobs) ? GetOptions.Include_Expired_Blobs : GetOptions.None;
+    GetOption getOption = (expiredBlobs) ? GetOption.Include_Expired_Blobs : GetOption.None;
 
     try {
-      Port port = replicaId.getDataNodeId().getPortToConnectTo(sslEnabledDatacentersList);
+      Port port = replicaId.getDataNodeId().getPortToConnectTo();
       connectedChannel = connectionPool.checkOutConnection(replicaId.getDataNodeId().getHostname(), port, 10000);
 
       GetRequest getRequest =
           new GetRequest(correlationId.incrementAndGet(), "readverifier", MessageFormatFlags.BlobUserMetadata,
-              partitionRequestInfos, getOptions);
+              partitionRequestInfos, getOption);
       System.out.println("Get Request to check blob usermetadata : " + getRequest);
       GetResponse getResponse = null;
       getResponse = BlobValidator.getGetResponseFromStream(connectedChannel, getRequest, clusterMap);
@@ -397,10 +432,9 @@ public class AdminTool {
 
       ServerErrorCode serverResponseCode = getResponse.getPartitionResponseInfoList().get(0).getErrorCode();
       if (getResponse.getError() != ServerErrorCode.No_Error || serverResponseCode != ServerErrorCode.No_Error) {
-        System.out.println("usermetadata get error on response " + getResponse.getError() +
-            " error code on partition " + serverResponseCode +
-            " ambryReplica " + replicaId.getDataNodeId().getHostname() + " port " + port.toString() +
-            " blobId " + blobId);
+        System.out.println("usermetadata get error on response " + getResponse.getError() + " error code on partition "
+            + serverResponseCode + " ambryReplica " + replicaId.getDataNodeId().getHostname() + " port "
+            + port.toString() + " blobId " + blobId);
         if (serverResponseCode == ServerErrorCode.Blob_Not_Found) {
           return null;
         } else if (serverResponseCode == ServerErrorCode.Blob_Deleted) {

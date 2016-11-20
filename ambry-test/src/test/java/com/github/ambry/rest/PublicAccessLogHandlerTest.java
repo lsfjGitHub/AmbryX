@@ -15,12 +15,20 @@ package com.github.ambry.rest;
 
 import com.codahale.metrics.MetricRegistry;
 import io.netty.channel.embedded.EmbeddedChannel;
-import io.netty.handler.codec.http.*;
+import io.netty.handler.codec.http.DefaultHttpHeaders;
+import io.netty.handler.codec.http.DefaultLastHttpContent;
+import io.netty.handler.codec.http.HttpHeaders;
+import io.netty.handler.codec.http.HttpMethod;
+import io.netty.handler.codec.http.HttpRequest;
+import io.netty.handler.codec.http.HttpResponseStatus;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Random;
 import org.junit.Assert;
 import org.junit.Test;
-
-import java.io.IOException;
-import java.util.*;
 
 
 /**
@@ -45,8 +53,7 @@ public class PublicAccessLogHandlerTest {
    * @throws IOException
    */
   @Test
-  public void requestHandleWithGoodInputTest()
-      throws IOException {
+  public void requestHandleWithGoodInputTest() throws IOException {
     doRequestHandleTest(HttpMethod.POST, "POST", false);
     doRequestHandleTest(HttpMethod.GET, "GET", false);
     doRequestHandleTest(HttpMethod.DELETE, "DELETE", false);
@@ -57,8 +64,7 @@ public class PublicAccessLogHandlerTest {
    * @throws IOException
    */
   @Test
-  public void requestHandleWithGoodInputTestWithKeepAlive()
-      throws IOException {
+  public void requestHandleWithGoodInputTestWithKeepAlive() throws IOException {
     doRequestHandleWithKeepAliveTest(HttpMethod.POST, "POST");
     doRequestHandleWithKeepAliveTest(HttpMethod.GET, "GET");
     doRequestHandleWithKeepAliveTest(HttpMethod.DELETE, "DELETE");
@@ -69,8 +75,7 @@ public class PublicAccessLogHandlerTest {
    * @throws IOException
    */
   @Test
-  public void requestHandleWithTwoSuccessiveRequest()
-      throws IOException {
+  public void requestHandleWithTwoSuccessiveRequest() throws IOException {
     doRequestHandleWithMultipleRequest(HttpMethod.POST, "POST");
     doRequestHandleWithMultipleRequest(HttpMethod.GET, "GET");
     doRequestHandleWithMultipleRequest(HttpMethod.DELETE, "DELETE");
@@ -81,8 +86,7 @@ public class PublicAccessLogHandlerTest {
    * @throws IOException
    */
   @Test
-  public void requestHandleOnCloseTest()
-      throws IOException {
+  public void requestHandleOnCloseTest() throws IOException {
     doRequestHandleTest(HttpMethod.POST, EchoMethodHandler.CLOSE_URI, true);
     doRequestHandleTest(HttpMethod.GET, EchoMethodHandler.CLOSE_URI, true);
     doRequestHandleTest(HttpMethod.DELETE, EchoMethodHandler.CLOSE_URI, true);
@@ -93,8 +97,7 @@ public class PublicAccessLogHandlerTest {
    * @throws IOException
    */
   @Test
-  public void requestHandleOnDisconnectTest()
-      throws IOException {
+  public void requestHandleOnDisconnectTest() throws IOException {
     // disonnecting the embedded channel, calls close of PubliAccessLogRequestHandler
     doRequestHandleTest(HttpMethod.POST, EchoMethodHandler.DISCONNECT_URI, true);
     doRequestHandleTest(HttpMethod.GET, EchoMethodHandler.DISCONNECT_URI, true);
@@ -105,8 +108,7 @@ public class PublicAccessLogHandlerTest {
    * Tests for the request handling flow with transfer encoding chunked
    */
   @Test
-  public void doRequestHandleWithChunkedResponse()
-      throws IOException {
+  public void doRequestHandleWithChunkedResponse() throws IOException {
     EmbeddedChannel channel = createChannel();
     HttpHeaders headers = new DefaultHttpHeaders();
     headers.add(EchoMethodHandler.IS_CHUNKED, "true");
@@ -126,8 +128,7 @@ public class PublicAccessLogHandlerTest {
    * @param testErrorCase true if error case has to be tested, false otherwise
    * @throws IOException
    */
-  private void doRequestHandleTest(HttpMethod httpMethod, String uri, boolean testErrorCase)
-      throws IOException {
+  private void doRequestHandleTest(HttpMethod httpMethod, String uri, boolean testErrorCase) throws IOException {
     EmbeddedChannel channel = createChannel();
     List<HttpHeaders> httpHeadersList = getHeadersList();
     for (HttpHeaders headers : httpHeadersList) {
@@ -151,8 +152,7 @@ public class PublicAccessLogHandlerTest {
    * @param uri Uri to be used during the request
    * @throws IOException
    */
-  private void doRequestHandleWithKeepAliveTest(HttpMethod httpMethod, String uri)
-      throws IOException {
+  private void doRequestHandleWithKeepAliveTest(HttpMethod httpMethod, String uri) throws IOException {
     EmbeddedChannel channel = createChannel();
     // contains one logged request header
     HttpHeaders headers = new DefaultHttpHeaders();
@@ -181,8 +181,7 @@ public class PublicAccessLogHandlerTest {
    * @param uri Uri to be used during the request
    * @throws IOException
    */
-  private void doRequestHandleWithMultipleRequest(HttpMethod httpMethod, String uri)
-      throws IOException {
+  private void doRequestHandleWithMultipleRequest(HttpMethod httpMethod, String uri) throws IOException {
     EmbeddedChannel channel = createChannel();
     // contains one logged request header
     HttpHeaders headers1 = new DefaultHttpHeaders();
@@ -245,8 +244,8 @@ public class PublicAccessLogHandlerTest {
     subString += "[isChunked=" + chunkedResponse + "]), status=" + HttpResponseStatus.OK.code();
 
     if (!testErrorCase) {
-      Assert
-          .assertTrue("Public Access log entry doesn't have response set correctly", lastLogEntry.contains(subString));
+      Assert.assertTrue("Public Access log entry doesn't have response set correctly",
+          lastLogEntry.contains(subString));
     } else {
       Assert.assertTrue("Public Access log entry doesn't have error set correctly ",
           lastLogEntry.contains(": Channel closed while request in progress."));
@@ -310,7 +309,7 @@ public class PublicAccessLogHandlerTest {
    * @param expected, true if the headers are expected, false otherwise
    */
   private void verifyPublicAccessLogEntryForRequestHeaders(String logEntry, HttpHeaders headers, HttpMethod httpMethod,
-                                                           boolean expected) {
+      boolean expected) {
     Iterator<Map.Entry<String, String>> itr = headers.iterator();
     while (itr.hasNext()) {
       Map.Entry<String, String> entry = itr.next();

@@ -43,8 +43,7 @@ public class ConnectionTrackerTest {
   private ArrayList<String> connIds = new ArrayList<String>();
 
   @Before
-  public void initialize()
-      throws IOException {
+  public void initialize() throws IOException {
     Properties props = new Properties();
     props.setProperty("router.hostname", "localhost");
     props.setProperty("router.datacenter.name", "DC1");
@@ -220,7 +219,7 @@ public class ConnectionTrackerTest {
   }
 
   /**
-   * Mocks a {@link Selector#connected()} call.
+   * Mocks a {@link com.github.ambry.network.Selector#connected()} call.
    * @return a list of connections that were previously added as part of {@link #mockNewConnection(String, Port)}
    */
   private List<String> getNewlyEstablishedConnections() {

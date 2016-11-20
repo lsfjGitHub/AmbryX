@@ -22,17 +22,33 @@ import com.github.ambry.router.Callback;
 import com.github.ambry.router.CopyingAsyncWritableChannel;
 import com.github.ambry.utils.Utils;
 import io.netty.buffer.Unpooled;
-import io.netty.handler.codec.http.*;
-import io.netty.handler.codec.http.multipart.*;
-import org.junit.Test;
-
+import io.netty.handler.codec.http.DefaultFullHttpRequest;
+import io.netty.handler.codec.http.DefaultHttpContent;
+import io.netty.handler.codec.http.DefaultHttpHeaders;
+import io.netty.handler.codec.http.DefaultHttpRequest;
+import io.netty.handler.codec.http.HttpContent;
+import io.netty.handler.codec.http.HttpHeaders;
+import io.netty.handler.codec.http.HttpMethod;
+import io.netty.handler.codec.http.HttpRequest;
+import io.netty.handler.codec.http.HttpVersion;
+import io.netty.handler.codec.http.multipart.DefaultHttpDataFactory;
+import io.netty.handler.codec.http.multipart.FileUpload;
+import io.netty.handler.codec.http.multipart.HttpDataFactory;
+import io.netty.handler.codec.http.multipart.HttpPostRequestDecoder;
+import io.netty.handler.codec.http.multipart.HttpPostRequestEncoder;
+import io.netty.handler.codec.http.multipart.MemoryFileUpload;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.nio.charset.Charset;
 import java.security.MessageDigest;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.Properties;
+import java.util.Random;
 import java.util.concurrent.ExecutionException;
+import org.junit.Test;
 
 import static org.junit.Assert.*;
 
@@ -62,8 +78,7 @@ public class NettyMultipartRequestTest {
    * @throws RestServiceException
    */
   @Test
-  public void instantiationTest()
-      throws RestServiceException {
+  public void instantiationTest() throws RestServiceException {
     // POST will succeed.
     NettyRequest.bufferWatermark = 1;
     HttpRequest httpRequest = new DefaultHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.POST, "/");
@@ -97,8 +112,7 @@ public class NettyMultipartRequestTest {
    * @throws Exception
    */
   @Test
-  public void multipartRequestDecodeTest()
-      throws Exception {
+  public void multipartRequestDecodeTest() throws Exception {
     String[] digestAlgorithms = {"", "MD5", "SHA-1", "SHA-256"};
     for (String digestAlgorithm : digestAlgorithms) {
       // request without content
@@ -129,8 +143,7 @@ public class NettyMultipartRequestTest {
    * @throws Exception
    */
   @Test
-  public void refCountsAfterCloseTest()
-      throws Exception {
+  public void refCountsAfterCloseTest() throws Exception {
     NettyMultipartRequest requestCloseBeforePrepare = createRequest(null, null);
     NettyMultipartRequest requestCloseAfterPrepare = createRequest(null, null);
     List<HttpContent> httpContents = new ArrayList<HttpContent>(5);
@@ -154,8 +167,7 @@ public class NettyMultipartRequestTest {
    * @throws Exception
    */
   @Test
-  public void operationsAfterCloseTest()
-      throws Exception {
+  public void operationsAfterCloseTest() throws Exception {
     NettyMultipartRequest request = createRequest(null, null);
     request.prepare();
     closeRequestAndValidate(request);
@@ -189,8 +201,7 @@ public class NettyMultipartRequestTest {
    * @throws Exception
    */
   @Test
-  public void readIntoExceptionsTest()
-      throws Exception {
+  public void readIntoExceptionsTest() throws Exception {
     // most tests are in NettyRequest. Adding tests for differing code in NettyMultipartRequest
     // try to call readInto twice.
     NettyMultipartRequest request = createRequest(null, null);
@@ -227,8 +238,7 @@ public class NettyMultipartRequestTest {
    * @throws Exception
    */
   @Test
-  public void prepareTest()
-      throws Exception {
+  public void prepareTest() throws Exception {
     // prepare half baked data
     HttpRequest httpRequest = new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.POST, "/");
     HttpPostRequestEncoder encoder = createEncoder(httpRequest, null);
@@ -327,8 +337,7 @@ public class NettyMultipartRequestTest {
    * @return a {@link NettyMultipartRequest} containing all the {@code headers} and {@code parts}.
    * @throws Exception
    */
-  private NettyMultipartRequest createRequest(HttpHeaders headers, InMemoryFile[] parts)
-      throws Exception {
+  private NettyMultipartRequest createRequest(HttpHeaders headers, InMemoryFile[] parts) throws Exception {
     HttpRequest httpRequest = new DefaultFullHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.POST, "/");
     if (headers != null) {
       httpRequest.headers().set(headers);

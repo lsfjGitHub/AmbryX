@@ -15,14 +15,18 @@ package com.github.ambry.admin;
 
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.rest.*;
+import com.github.ambry.rest.IdConverter;
+import com.github.ambry.rest.MockRestRequest;
+import com.github.ambry.rest.RestMethod;
+import com.github.ambry.rest.RestRequest;
+import com.github.ambry.rest.RestServiceErrorCode;
+import com.github.ambry.rest.RestServiceException;
 import com.github.ambry.router.Callback;
 import com.github.ambry.utils.UtilsTest;
-import org.json.JSONObject;
-import org.junit.Test;
-
 import java.util.Properties;
 import java.util.concurrent.ExecutionException;
+import org.json.JSONObject;
+import org.junit.Test;
 
 import static org.junit.Assert.*;
 
@@ -38,8 +42,7 @@ public class AdminIdConverterFactoryTest {
    * @throws Exception
    */
   @Test
-  public void adminIdConverterTest()
-      throws Exception {
+  public void adminIdConverterTest() throws Exception {
     // dud properties. server should pick up defaults
     Properties properties = new Properties();
     VerifiableProperties verifiableProperties = new VerifiableProperties(properties);

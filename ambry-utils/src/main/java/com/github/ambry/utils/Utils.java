@@ -31,6 +31,10 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Properties;
 import java.util.Random;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -55,8 +59,7 @@ public class Utils {
    * @return The String read from the stream
    * @throws IOException
    */
-  public static String readShortString(DataInputStream input)
-      throws IOException {
+  public static String readShortString(DataInputStream input) throws IOException {
     Short size = input.readShort();
     if (size < 0) {
       throw new IllegalArgumentException("readShortString : the size cannot be negative");
@@ -82,8 +85,7 @@ public class Utils {
    * @return The String read from the stream
    * @throws IOException
    */
-  public static String readIntString(DataInputStream input)
-      throws IOException {
+  public static String readIntString(DataInputStream input) throws IOException {
     return readIntString(input, StandardCharsets.UTF_8);
   }
 
@@ -94,8 +96,7 @@ public class Utils {
    * @return The String read from the stream
    * @throws IOException
    */
-  public static String readIntString(DataInputStream input, Charset charset)
-      throws IOException {
+  public static String readIntString(DataInputStream input, Charset charset) throws IOException {
     int size = input.readInt();
     if (size < 0) {
       throw new IllegalArgumentException("readIntString : the size cannot be negative");
@@ -121,8 +122,7 @@ public class Utils {
    * @return
    * @throws IOException
    */
-  public static ByteBuffer readIntBuffer(DataInputStream input)
-      throws IOException {
+  public static ByteBuffer readIntBuffer(DataInputStream input) throws IOException {
     int size = input.readInt();
     if (size < 0) {
       throw new IllegalArgumentException("readIntBuffer : the size cannot be negative");
@@ -148,8 +148,7 @@ public class Utils {
    * @return
    * @throws IOException
    */
-  public static ByteBuffer readShortBuffer(DataInputStream input)
-      throws IOException {
+  public static ByteBuffer readShortBuffer(DataInputStream input) throws IOException {
     short size = input.readShort();
     if (size < 0) {
       throw new IllegalArgumentException("readShortBuffer : the size cannot be negative");
@@ -228,14 +227,38 @@ public class Utils {
   }
 
   /**
+   * Create a {@link ScheduledExecutorService} with the given properties.
+   * @param numThreads The number of threads in the scheduler's thread pool.
+   * @param threadNamePrefix The prefix string for thread names in this thread pool.
+   * @param isDaemon {@code true} if the threads in this scheduler's should be daemon threads.
+   * @return A {@link ScheduledExecutorService}.
+   */
+  public static ScheduledExecutorService newScheduler(int numThreads, String threadNamePrefix, boolean isDaemon) {
+    ScheduledThreadPoolExecutor scheduler =
+        new ScheduledThreadPoolExecutor(numThreads, new SchedulerThreadFactory(threadNamePrefix, isDaemon));
+    scheduler.setContinueExistingPeriodicTasksAfterShutdownPolicy(false);
+    scheduler.setExecuteExistingDelayedTasksAfterShutdownPolicy(false);
+    return scheduler;
+  }
+
+  /**
+   * Create a {@link ScheduledExecutorService} with the given properties.
+   * @param numThreads The number of threads in the scheduler's thread pool.
+   * @param isDaemon {@code true} if the threads in this scheduler's should be daemon threads.
+   * @return A {@link ScheduledExecutorService}.
+   */
+  public static ScheduledExecutorService newScheduler(int numThreads, boolean isDaemon) {
+    return newScheduler(numThreads, "ambry-scheduler-", isDaemon);
+  }
+
+  /**
    * Open a channel for the given file
    * @param file
    * @param mutable
    * @return
    * @throws FileNotFoundException
    */
-  public static FileChannel openChannel(File file, boolean mutable)
-      throws FileNotFoundException {
+  public static FileChannel openChannel(File file, boolean mutable) throws FileNotFoundException {
     if (mutable) {
       return new RandomAccessFile(file, "rw").getChannel();
     } else {
@@ -297,8 +320,8 @@ public class Utils {
       throws ClassNotFoundException, InstantiationException, IllegalAccessException, NoSuchMethodException,
              InvocationTargetException {
     for (Constructor<?> ctor : Class.forName(className).getDeclaredConstructors()) {
-      if (ctor.getParameterTypes().length == 2 && ctor.getParameterTypes()[0].isAssignableFrom(arg1.getClass()) &&
-          ctor.getParameterTypes()[1].isAssignableFrom(arg2.getClass())) {
+      if (ctor.getParameterTypes().length == 2 && ctor.getParameterTypes()[0].isAssignableFrom(arg1.getClass())
+          && ctor.getParameterTypes()[1].isAssignableFrom(arg2.getClass())) {
         return (T) ctor.newInstance(arg1, arg2);
       }
     }
@@ -323,9 +346,9 @@ public class Utils {
       throws ClassNotFoundException, InstantiationException, IllegalAccessException, NoSuchMethodException,
              InvocationTargetException {
     for (Constructor<?> ctor : Class.forName(className).getDeclaredConstructors()) {
-      if (ctor.getParameterTypes().length == 3 && ctor.getParameterTypes()[0].isAssignableFrom(arg1.getClass()) &&
-          ctor.getParameterTypes()[1].isAssignableFrom(arg2.getClass()) && ctor.getParameterTypes()[2]
-          .isAssignableFrom(arg3.getClass())) {
+      if (ctor.getParameterTypes().length == 3 && ctor.getParameterTypes()[0].isAssignableFrom(arg1.getClass())
+          && ctor.getParameterTypes()[1].isAssignableFrom(arg2.getClass())
+          && ctor.getParameterTypes()[2].isAssignableFrom(arg3.getClass())) {
         return (T) ctor.newInstance(arg1, arg2, arg3);
       }
     }
@@ -412,8 +435,7 @@ public class Utils {
    *
    * @param filename The path of the file to read
    */
-  public static Properties loadProps(String filename)
-      throws FileNotFoundException, IOException {
+  public static Properties loadProps(String filename) throws FileNotFoundException, IOException {
     InputStream propStream = new FileInputStream(filename);
     Properties props = new Properties();
     props.load(propStream);
@@ -476,8 +498,7 @@ public class Utils {
    * @param path file path
    * @throws IOException
    */
-  public static void writeStringToFile(String string, String path)
-      throws IOException {
+  public static void writeStringToFile(String string, String path) throws IOException {
     FileWriter fileWriter = null;
     try {
       File clusterFile = new File(path);
@@ -498,8 +519,7 @@ public class Utils {
    * @throws IOException
    * @throws JSONException
    */
-  public static void writeJsonToFile(JSONObject jsonObject, String path)
-      throws IOException, JSONException {
+  public static void writeJsonToFile(JSONObject jsonObject, String path) throws IOException, JSONException {
     writeStringToFile(jsonObject.toString(2), path);
   }
 
@@ -510,8 +530,7 @@ public class Utils {
    * @return string read from specified file
    * @throws IOException
    */
-  public static String readStringFromFile(String path)
-      throws IOException {
+  public static String readStringFromFile(String path) throws IOException {
     File file = new File(path);
     byte[] encoded = new byte[(int) file.length()];
     DataInputStream ds = null;
@@ -534,8 +553,7 @@ public class Utils {
    * @throws IOException
    * @throws JSONException
    */
-  public static JSONObject readJsonFromFile(String path)
-      throws IOException, JSONException {
+  public static JSONObject readJsonFromFile(String path) throws IOException, JSONException {
     return new JSONObject(readStringFromFile(path));
   }
 
@@ -545,8 +563,7 @@ public class Utils {
    * @param capacityBytes the number of bytes to pre-allocate
    * @throws IOException
    */
-  public static void preAllocateFileIfNeeded(File file, long capacityBytes)
-      throws IOException {
+  public static void preAllocateFileIfNeeded(File file, long capacityBytes) throws IOException {
     if (!file.exists()) {
       file.createNewFile();
     }
@@ -559,15 +576,15 @@ public class Utils {
         // ignore the interruption and check the exit value to be sure
       }
       if (process.exitValue() != 0) {
-        throw new IOException("error while trying to preallocate file " + file.getAbsolutePath() +
-            " exitvalue " + process.exitValue() +
-            " error string " + process.getErrorStream());
+        throw new IOException(
+            "error while trying to preallocate file " + file.getAbsolutePath() + " exitvalue " + process.exitValue()
+                + " error string " + process.getErrorStream());
       }
     }
   }
 
   /**
-   * Get a pseudo-random long uniformly between 0 and n-1. Stolen from {@link Random#nextInt()}.
+   * Get a pseudo-random long uniformly between 0 and n-1. Stolen from {@link java.util.Random#nextInt()}.
    *
    * @param random random object used to generate the random number so that we generate
    *                     uniforml random between 0 and n-1
@@ -611,8 +628,7 @@ public class Utils {
    * @return byte[] which has the data that is read from the stream
    * @throws IOException
    */
-  public static byte[] readBytesFromStream(InputStream stream, int size)
-      throws IOException {
+  public static byte[] readBytesFromStream(InputStream stream, int size) throws IOException {
     return readBytesFromStream(stream, new byte[size], 0, size);
   }
 
@@ -627,8 +643,7 @@ public class Utils {
    * @return byte[] which has the data that is read from the stream. Same as @param data
    * @throws IOException
    */
-  public static byte[] readBytesFromStream(InputStream stream, byte[] data, int offset, int size)
-      throws IOException {
+  public static byte[] readBytesFromStream(InputStream stream, byte[] data, int offset, int size) throws IOException {
     int read = 0;
     while (read < size) {
       int sizeRead = stream.read(data, offset, size - read);
@@ -705,5 +720,30 @@ public class Utils {
       throwable = throwable.getCause();
     }
     return throwable;
+  }
+
+  /**
+   * A thread factory to use for {@link ScheduledExecutorService}s instantiated using
+   * {@link #newScheduler(int, String, boolean)}.
+   */
+  private static class SchedulerThreadFactory implements ThreadFactory {
+    private final AtomicInteger schedulerThreadId = new AtomicInteger(0);
+    private final String threadNamePrefix;
+    private final boolean isDaemon;
+
+    /**
+     * Create a {@link SchedulerThreadFactory}
+     * @param threadNamePrefix the prefix string for threads in this scheduler's thread pool.
+     * @param isDaemon {@code true} if the created threads should be daemon threads.
+     */
+    SchedulerThreadFactory(String threadNamePrefix, boolean isDaemon) {
+      this.threadNamePrefix = threadNamePrefix;
+      this.isDaemon = isDaemon;
+    }
+
+    @Override
+    public Thread newThread(Runnable r) {
+      return Utils.newThread(threadNamePrefix + schedulerThreadId.getAndIncrement(), r, isDaemon);
+    }
   }
 }

@@ -16,17 +16,25 @@ package com.github.ambry.store;
 import com.codahale.metrics.MetricRegistry;
 import com.github.ambry.config.StoreConfig;
 import com.github.ambry.config.VerifiableProperties;
-import com.github.ambry.utils.*;
-import org.junit.Assert;
-import org.junit.Test;
-
+import com.github.ambry.utils.ByteBufferInputStream;
+import com.github.ambry.utils.MockTime;
+import com.github.ambry.utils.SystemTime;
+import com.github.ambry.utils.Time;
+import com.github.ambry.utils.Utils;
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.Channels;
 import java.nio.channels.ReadableByteChannel;
-import java.util.*;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.List;
+import java.util.NoSuchElementException;
+import java.util.Properties;
 import java.util.concurrent.ScheduledExecutorService;
+import org.junit.Assert;
+import org.junit.Test;
 
 
 /**
@@ -85,7 +93,7 @@ public class HardDeleterTest {
 
       @Override
       public Iterator<HardDeleteInfo> getHardDeleteMessages(MessageReadSet readSet, StoreKeyFactory factory,
-                                                            List<byte[]> recoveryInfoList) {
+          List<byte[]> recoveryInfoList) {
         class MockMessageStoreHardDeleteIterator implements Iterator<HardDeleteInfo> {
           int count;
           MessageReadSet readSet;
