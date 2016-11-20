@@ -16,6 +16,9 @@ package com.github.ambry.rest;
 import com.github.ambry.router.AsyncWritableChannel;
 import com.github.ambry.router.Callback;
 import com.github.ambry.router.FutureResult;
+import org.json.JSONException;
+import org.json.JSONObject;
+
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.net.URI;
@@ -25,18 +28,11 @@ import java.nio.ByteBuffer;
 import java.nio.channels.ClosedChannelException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantLock;
-import org.json.JSONException;
-import org.json.JSONObject;
 
 
 /**
@@ -57,15 +53,7 @@ public class MockRestRequest implements RestRequest {
    * List of "events" (function calls) that can occur inside MockRestRequest.
    */
   public enum Event {
-    GetRestMethod,
-    GetPath,
-    GetUri,
-    GetArgs,
-    GetSize,
-    ReadInto,
-    IsOpen,
-    Close,
-    GetMetricsTracker
+    GetRestMethod, GetPath, GetUri, GetArgs, GetSize, ReadInto, IsOpen, Close, GetMetricsTracker
   }
 
   /**
@@ -192,7 +180,7 @@ public class MockRestRequest implements RestRequest {
     } else {
       contentLength =
           args.get(CONTENT_LENGTH_HEADER_KEY) != null ? Long.parseLong(args.get(CONTENT_LENGTH_HEADER_KEY).toString())
-              : 0;
+              : -1;
     }
     onEventComplete(Event.GetSize);
     return contentLength;
@@ -224,8 +212,7 @@ public class MockRestRequest implements RestRequest {
   }
 
   @Override
-  public void setDigestAlgorithm(String digestAlgorithm)
-      throws NoSuchAlgorithmException {
+  public void setDigestAlgorithm(String digestAlgorithm) throws NoSuchAlgorithmException {
     if (callbackWrapper != null) {
       throw new IllegalStateException("Cannot create a digest because some content has already been discarded");
     }
@@ -252,8 +239,7 @@ public class MockRestRequest implements RestRequest {
   }
 
   @Override
-  public void close()
-      throws IOException {
+  public void close() throws IOException {
     channelOpen.set(false);
     onEventComplete(Event.Close);
   }
@@ -282,8 +268,7 @@ public class MockRestRequest implements RestRequest {
    * through the read operations. To indicate end of content, add a null ByteBuffer.
    * @throws ClosedChannelException if request channel has been closed.
    */
-  public void addContent(ByteBuffer content)
-      throws IOException {
+  public void addContent(ByteBuffer content) throws IOException {
     if (!RestMethod.POST.equals(getRestMethod()) && content != null) {
       throw new IllegalStateException("There is no content expected for " + getRestMethod());
     } else if (!isOpen()) {
@@ -311,7 +296,7 @@ public class MockRestRequest implements RestRequest {
    * @param content the piece of {@link ByteBuffer} that needs to be written to the {@code writeChannel}.
    */
   private void writeContent(AsyncWritableChannel writeChannel, ReadIntoCallbackWrapper callbackWrapper,
-      ByteBuffer content) {
+                            ByteBuffer content) {
     ContentWriteCallback writeCallback;
     if (content == null) {
       allContentReceived = true;
@@ -333,8 +318,7 @@ public class MockRestRequest implements RestRequest {
    * @param headers headers sent with the request.
    * @throws UnsupportedEncodingException if an argument key or value cannot be URL decoded.
    */
-  private void populateArgs(JSONObject headers)
-      throws JSONException, UnsupportedEncodingException {
+  private void populateArgs(JSONObject headers) throws JSONException, UnsupportedEncodingException {
     if (headers != null) {
       // add headers. Handles headers with multiple values.
       Iterator<String> headerKeys = headers.keys();
@@ -371,8 +355,7 @@ public class MockRestRequest implements RestRequest {
    * @param value the value of the argument.
    * @throws UnsupportedEncodingException if {@code key} or {@code value} cannot be URL decoded.
    */
-  private void addOrUpdateArg(String key, Object value)
-      throws UnsupportedEncodingException {
+  private void addOrUpdateArg(String key, Object value) throws UnsupportedEncodingException {
     key = URLDecoder.decode(key, "UTF-8");
     if (value != null && value instanceof String) {
       String valueStr = URLDecoder.decode((String) value, "UTF-8");
